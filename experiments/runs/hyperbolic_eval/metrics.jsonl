@@ -1,0 +1,2 @@
+{"query": "mammal", "hyperbolic_map@10": 0.82, "euclidean_map@10": 0.67}
+{"query": "vertebrate", "hyperbolic_map@10": 0.79, "euclidean_map@10": 0.64}

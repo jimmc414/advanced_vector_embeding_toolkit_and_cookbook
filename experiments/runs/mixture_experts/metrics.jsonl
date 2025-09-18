@@ -1,0 +1,2 @@
+{"split": "code", "mrr_single": 0.50, "mrr_mixture": 0.65}
+{"split": "text", "mrr_single": 0.58, "mrr_mixture": 0.61}
