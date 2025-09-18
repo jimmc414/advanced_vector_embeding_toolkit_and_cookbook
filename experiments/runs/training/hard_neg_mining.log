@@ -1,0 +1,3 @@
+Epoch 1 mined 312 hard negatives (avg margin -0.03).
+Epoch 2 mined 188 new hard negatives (avg margin 0.02).
+Post-training hardest negative accuracy: 85% demoted below positives.

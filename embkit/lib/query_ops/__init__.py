@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Sequence, Tuple
+from typing import List, Mapping, Sequence, Tuple
 import numpy as np
 from ..utils import l2n
 
@@ -196,6 +196,55 @@ def vector_join(results: Sequence[Sequence[Tuple[int | str, float]]], min_hits: 
     fallback = [(doc_id, total, count) for doc_id, (total, count) in agg.items()]
     fallback.sort(key=lambda x: (-x[2], -x[1]))
     return fallback
+
+
+def fair_rerank(
+    candidates: Sequence[int | str],
+    relevance: Mapping[int | str, float],
+    groups: Mapping[int | str, str],
+    protected_group: str,
+    target_ratio: float,
+    top_k: int | None = None,
+) -> List[int | str]:
+    """Re-rank ``candidates`` to satisfy a minimum protected group exposure."""
+    if top_k is None:
+        top_k = len(candidates)
+    if top_k <= 0:
+        return []
+    prot = [c for c in candidates if groups.get(c) == protected_group]
+    rest = [c for c in candidates if groups.get(c) != protected_group]
+    key = lambda cid: float(relevance.get(cid, 0.0))
+    prot.sort(key=key, reverse=True)
+    rest.sort(key=key, reverse=True)
+    out: List[int | str] = []
+    prot_i = 0
+    rest_i = 0
+    protected_count = 0
+    for idx in range(top_k):
+        required = int(np.floor(target_ratio * (idx + 1)))
+        pick_prot = False
+        if prot_i < len(prot):
+            if protected_count < required:
+                pick_prot = True
+            elif rest_i >= len(rest):
+                pick_prot = True
+            else:
+                score_prot = key(prot[prot_i])
+                score_rest = key(rest[rest_i])
+                pick_prot = score_prot >= score_rest
+        elif rest_i >= len(rest):
+            break
+        if pick_prot:
+            choice = prot[prot_i]
+            prot_i += 1
+            protected_count += 1
+        else:
+            if rest_i >= len(rest):
+                break
+            choice = rest[rest_i]
+            rest_i += 1
+        out.append(choice)
+    return out
 
 
 def vector_join_and(results: Sequence[Sequence[Tuple[int | str, float]]]) -> List[Tuple[int | str, float, int]]:
