@@ -1,0 +1,3 @@
+Before calibration: ECE=0.10, Brier=0.25
+After temperature(T=1.5): ECE=0.02, Brier=0.18
+After isotonic: ECE=0.018, Brier=0.177

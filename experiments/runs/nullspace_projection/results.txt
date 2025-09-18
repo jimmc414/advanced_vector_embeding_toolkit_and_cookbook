@@ -1,0 +1,4 @@
+Query: "programmer"
+Before debiasing: ['doc_male_01', 'doc_male_05', 'doc_female_02', 'doc_male_07', 'doc_male_03']
+After debiasing:  ['doc_female_02', 'doc_male_01', 'doc_female_06', 'doc_male_05', 'doc_female_08']
+Exposure shift (female share top-5): 0.20 -> 0.50

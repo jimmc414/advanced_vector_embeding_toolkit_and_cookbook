@@ -538,6 +538,186 @@ variants = generate_counterfactuals("top universities in Germany", {"Germany": [
 
 `tests/test_counterfactual.py` validates facet generation and rank-delta accounting so regressions surface quickly.【F:tests/test_counterfactual.py†L1-L15】
 
+### 21. Nullspace Bias Removal (Safety & Fairness)
+
+**Use case:** Audit and mitigate demographic bias in ranked results by removing a protected attribute direction (e.g., gender) from query and document embeddings before scoring.【F:embkit/lib/analysis/nullspace.py†L19-L42】
+
+**Method:** `remove_direction` subtracts the projection of a vector onto the identified bias direction, while `remove_directions` applies the same nullspace projection to batches for efficient re-ranking runs.【F:embkit/lib/analysis/nullspace.py†L10-L42】 Apply the helper to queries and top-k candidates, then compare slates to quantify exposure deltas.
+
+**Empirical findings:** On the jobs audit, projecting out the gender axis doubled the female share in the "programmer" top-5 (20%→50%) with acceptable relevance drift.【F:experiments/runs/nullspace_projection/results.txt†L1-L4】
+
+**Config snippet:**
+```python
+from embkit.lib.analysis.nullspace import remove_direction, remove_directions
+query_db = remove_direction(query_vec, gender_direction)
+doc_db = remove_directions(doc_matrix, gender_direction)
+```
+
+**Run logs:** Compare before/after rankings under `experiments/runs/nullspace_projection/` to document exposure shifts and decide whether to deploy the debiased embeddings.【F:experiments/runs/nullspace_projection/results.txt†L1-L4】
+
+Unit tests assert that masculine/feminine analogues collapse after projection and that batch and single-vector variants stay aligned.【F:tests/test_nullspace.py†L1-L23】
+
+### 22. Causal Feature Probing with Knockoffs (Generation & Reasoning)
+
+**Use case:** Determine whether a token like "COVID" is causally responsible for high scores or merely correlated noise by generating attribute knockoffs and measuring score deltas.【F:embkit/lib/analysis/knockoff.py†L12-L32】
+
+**Method:** `knockoff_adjust` removes or amplifies an attribute direction inside document vectors, and `knockoff_scores` reports original vs. adjusted cosine scores so you can detect large causal drops.【F:embkit/lib/analysis/knockoff.py†L12-L32】 Remove the attribute for hypothesis tests; add it when crafting counterfactual boosts.
+
+**Empirical findings:** Seven of the top ten medical articles lost ≥10% relevance once "COVID" was knocked out, confirming the retriever's heavy reliance on the term.【F:experiments/runs/causal_probe/report.md†L3-L7】
+
+**Usage snippet:**
+```python
+from embkit.lib.analysis.knockoff import knockoff_scores
+base, adjusted = knockoff_scores(query_vec, doc_vecs, covid_direction)
+delta = adjusted - base
+```
+
+**Run logs:** The knockoff report records score drops for both true knockoffs and random controls so you can distinguish causal signals from noise.【F:experiments/runs/causal_probe/report.md†L1-L7】
+
+Unit tests cover both vector adjustment and score comparisons to guard against regressions in the causal probe helpers.【F:tests/test_knockoff.py†L1-L18】
+
+### 23. Adversarially Robust Retrieval (Learning & Quality)
+
+**Use case:** Harden retrieval against typos, paraphrases, and gradient-based perturbations so attacks like "capitaloffrance" still return Paris.【F:embkit/lib/training/robust.py†L12-L36】
+
+**Method:** `generate_synonym_variants` creates paraphrased queries for augmentation, while `fgsm_perturb` applies normalized FGSM noise during training to simulate worst-case embedding shifts.【F:embkit/lib/training/robust.py†L12-L36】 Integrate both into your training loop and certify that perturbed queries keep retrieving the correct document.
+
+**Empirical findings:** The robust model lifted Recall@1 from ~0.5→0.88 on typo and synonym attacks and held up under ε=0.1 FGSM probes.【F:experiments/runs/robust_eval/summary.txt†L1-L5】
+
+**Config snippet:**
+```python
+variants = generate_synonym_variants(query_text, synonym_map)
+adv_query = fgsm_perturb(query_vec, grad, epsilon=0.1)
+```
+
+**Run logs:** Attack sweeps in `experiments/runs/robust_eval/summary.txt` summarize baseline vs. robust recall so you can quantify resilience gains.【F:experiments/runs/robust_eval/summary.txt†L1-L5】
+
+Unit tests verify paraphrase generation, FGSM normalization, and the surrounding training utilities so robustness tooling stays reliable.【F:tests/test_training_ops.py†L1-L33】
+
+### 24. Hard Negative Mining (Learning & Quality)
+
+**Use case:** Improve precision by mining high-scoring false positives and enforcing margin losses that push them beneath the correct answer.【F:embkit/lib/training/hard_negative.py†L10-L31】
+
+**Method:** Use `mine_hard_negatives` to collect the strongest mistakes from ranked slates, then feed those triplets through `triplet_margin` (or your optimizer of choice) during re-training.【F:embkit/lib/training/hard_negative.py†L10-L31】 Refresh the mined pool every epoch or two for continuous improvement.
+
+**Empirical findings:** Two mining rounds demoted 85% of the hardest negatives and raised FAQ nDCG@10 to 0.912.【F:experiments/runs/training/hard_neg_mining.log†L1-L3】【F:experiments/runs/training/metrics_final.json†L1-L1】
+
+**Usage snippet:**
+```python
+hard = mine_hard_negatives(ranked_ids, positives={pos_id}, limit=3)
+loss = triplet_margin(q_vec, pos_vec, neg_vec)
+```
+
+**Run logs:** Mining summaries and final metrics under `experiments/runs/training/` document coverage and quality uplift for audits.【F:experiments/runs/training/hard_neg_mining.log†L1-L3】【F:experiments/runs/training/metrics_final.json†L1-L1】
+
+Unit tests ensure positives are never mistaken for negatives and that triplet margins drop to zero once the positive outranks the negative.【F:tests/test_training_ops.py†L23-L33】
+
+### 25. Active Feedback Labeling (Learning & Quality)
+
+**Use case:** Focus human labeling budget on uncertain queries by measuring ranking margins and triaging low-confidence searches.【F:embkit/lib/training/active.py†L10-L27】
+
+**Method:** `margin_uncertainty` computes the top-1 vs. top-2 gap, and `select_uncertain_queries` returns query IDs below a configurable threshold for annotation.【F:embkit/lib/training/active.py†L10-L27】 Feed the resulting list to your labeling UI or feedback queue.
+
+**Empirical findings:** Day-one triage flagged queries with <0.05 margin and, after retraining, boosted MRR on that cohort from 0.45→0.60.【F:experiments/runs/active_learning/day1.log†L1-L4】【F:experiments/runs/active_learning/metrics_active.json†L1-L1】
+
+**Usage snippet:**
+```python
+targets = select_uncertain_queries(score_map, threshold=0.1, limit=100)
+```
+
+**Run logs:** Daily selection logs plus `metrics_active.json` capture which queries were labeled and the resulting gains for reporting to stakeholders.【F:experiments/runs/active_learning/day1.log†L1-L4】【F:experiments/runs/active_learning/metrics_active.json†L1-L1】
+
+Unit tests assert that margin math behaves as expected and that the selector surfaces only low-confidence queries.【F:tests/test_training_ops.py†L36-L39】
+
+### 26. Drift Detection & Model Update (Learning & Quality)
+
+**Use case:** Detect corpus/query distribution shifts (e.g., "metaverse" spikes) early and trigger index/model refreshes before quality drops.【F:embkit/lib/monitoring/drift.py†L8-L30】
+
+**Method:** `hotelling_t2` compares the current batch mean against historical statistics with a regularized Hotelling's T², and `detect_drift` flags alarms when scores exceed your threshold.【F:embkit/lib/monitoring/drift.py†L8-L30】 Combine with monitoring to decide when to re-train or ingest new content.
+
+**Empirical findings:** A May 1st surge produced T²=15.2 (>10 threshold) and triggered an update; metrics normalized after refresh.【F:experiments/runs/drift_detection/log.txt†L1-L2】【F:experiments/runs/drift_detection/metrics_may_2025.json†L1-L1】
+
+**Usage snippet:**
+```python
+alert = detect_drift(new_query_batch, ref_mean, ref_cov, threshold=10.0)
+```
+
+**Run logs:** Drift logs and post-update metrics provide traceability for every alert and remediation action.【F:experiments/runs/drift_detection/log.txt†L1-L2】【F:experiments/runs/drift_detection/metrics_may_2025.json†L1-L1】
+
+Unit tests cover both high-drift and steady-state scenarios so alarms remain trustworthy.【F:tests/test_monitoring.py†L1-L20】
+
+### 27. Score Calibration and Confidence (Learning & Quality)
+
+**Use case:** Produce calibrated relevance probabilities for downstream consumers by correcting overconfident cosine scores.【F:embkit/lib/calibrate/temperature.py†L6-L45】【F:embkit/lib/calibrate/isotonic.py†L8-L44】
+
+**Method:** Fit a temperature parameter with `temperature_fit` for quick global scaling, or extract a monotonic mapping via `isotonic_fit`/`isotonic_apply` when you need non-linear calibration.【F:embkit/lib/calibrate/temperature.py†L6-L45】【F:embkit/lib/calibrate/isotonic.py†L8-L44】 Apply the calibrated probabilities to your API responses.
+
+**Empirical findings:** Temperature scaling (T≈1.5) cut ECE to 0.02 and isotonic smoothing squeezed it a bit further without harming ranking quality.【F:experiments/runs/calibration/ece_brier.txt†L1-L3】
+
+**Usage snippet:**
+```python
+T = temperature_fit(labels, logits)
+p_cal = temperature_apply(logits, T)
+thr, val = isotonic_fit(labels, logits)
+p_iso = isotonic_apply(logits, thr, val)
+```
+
+**Run logs:** Calibration dashboards live under `experiments/runs/calibration/`, recording ECE/Brier improvements per method for audit trails.【F:experiments/runs/calibration/ece_brier.txt†L1-L3】
+
+Unit tests confirm both temperature and isotonic calibrators behave and remain monotonic.【F:tests/test_calibration.py†L1-L36】
+
+### 28. Fairness-Aware Re-ranking (Safety & Fairness)
+
+**Use case:** Balance exposure between protected and majority groups when presenting ranked results (e.g., author demographics in publication search).【F:embkit/lib/query_ops/__init__.py†L201-L247】
+
+**Method:** `fair_rerank` greedily assembles a slate that meets the desired protected-group ratio while honoring relevance when both groups have supply.【F:embkit/lib/query_ops/__init__.py†L201-L247】 Tune `target_ratio` to match candidate share and set `top_k` to your display length.
+
+**Empirical findings:** Re-ranking moved minority-serving institutions from 12%→31% exposure in the top-10 with only a 1.5 point nDCG drop.【F:experiments/runs/fairness/rerank_log.txt†L1-L4】 The aggregate metrics show exposure aligning to 29/71 with strong overall relevance.【F:experiments/runs/fairness/metrics_fairness.json†L1-L1】
+
+**Usage snippet:**
+```python
+slate = fair_rerank(candidate_ids, relevance_scores, group_labels, protected_group="A", target_ratio=0.3, top_k=10)
+```
+
+**Run logs:** Fairness dashboards log per-query exposure deltas so you can monitor the relevance–fairness trade-off across releases.【F:experiments/runs/fairness/rerank_log.txt†L1-L4】【F:experiments/runs/fairness/metrics_fairness.json†L1-L1】
+
+Unit tests guarantee the helper meets minimum protected coverage targets in prefix positions.【F:tests/test_fairness.py†L1-L12】
+
+### 29. Privacy-Preserving Retrieval (Safety & Privacy)
+
+**Use case:** Protect sensitive queries (e.g., medical lookups) by transforming embeddings client-side and training with differential privacy noise.【F:embkit/lib/safety/privacy.py†L10-L35】
+
+**Method:** `apply_secure_transform` projects local embeddings through a learned matrix and optional noise before sending them to the server, while `dp_gaussian_noise` clips and perturbs gradients during DP-SGD fine-tuning.【F:embkit/lib/safety/privacy.py†L10-L35】 Together they limit information leakage in transit and training.
+
+**Empirical findings:** The privacy audit logged ε=8, δ=1e-6 with membership-inference AUC ≈0.52 and only ~2% recall loss relative to non-DP training.【F:experiments/runs/privacy/privacy_audit.json†L1-L1】
+
+**Usage snippet:**
+```python
+secure = apply_secure_transform(local_embed, transform_matrix, noise_scale=1e-3)
+dp_grad = dp_gaussian_noise(gradients, clip_norm=1.0, noise_multiplier=0.8)
+```
+
+**Run logs:** Privacy reports document DP budgets, audit scores, and quality deltas for compliance reviews.【F:experiments/runs/privacy/privacy_audit.json†L1-L1】
+
+Unit tests cover normalization of the secure transform and DP clipping to prevent regressions that could weaken guarantees.【F:tests/test_privacy.py†L1-L18】
+
+### 30. PII Screening and Redaction (Safety & Privacy)
+
+**Use case:** Detect and redact structured PII (emails, SSNs, phone numbers) before exposing snippets to end users.【F:embkit/lib/safety/pii.py†L6-L35】
+
+**Method:** `pii_contains` and `pii_redact` rely on curated regexes, while `pii_filter_results` walks result dictionaries to mask any offending fields by default.【F:embkit/lib/safety/pii.py†L6-L35】 Adjust the field or token to match your UI requirements.
+
+**Empirical findings:** Screening cut exposed PII by 68% while keeping nDCG loss to ~1%.【F:experiments/runs/pii_filter/log.txt†L1-L2】【F:experiments/runs/pii_filter/metrics_pii.json†L1-L1】
+
+**Usage snippet:**
+```python
+safe_results = pii_filter_results(search_results)
+```
+
+**Run logs:** PII filter logs list every redaction and its reason so policy teams can audit changes over time.【F:experiments/runs/pii_filter/log.txt†L1-L2】
+
+Unit tests ensure regex coverage and result masking remain intact as policies evolve.【F:tests/test_safety.py†L1-L25】
+
 ## Regenerating Demo Binaries
 
 The demo's binary artifacts (embeddings, FAISS index shards, and helper vectors)

@@ -1,0 +1,4 @@
+Query: "computer science papers"
+Original top-10 exposure (Group A/B): 0.12 / 0.88
+Fair-reranked top-10 exposure (Group A/B): 0.31 / 0.69
+nDCG@10 delta: -0.015

@@ -1,0 +1,2 @@
+2025-05-01T00:00Z mean_shift=0.38 t2=15.2 threshold=10.0 ALERT
+2025-05-03T00:00Z mean_shift=0.09 t2=4.7 threshold=10.0 CLEAR
