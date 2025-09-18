@@ -1,0 +1,7 @@
+{"exp_id": "demo", "metric": "Recall@10", "value": 0.4, "split": "demo", "ts": 1758213663}
+{"exp_id": "demo", "metric": "nDCG@10", "value": 0.3261859507142915, "split": "demo", "ts": 1758213663}
+{"exp_id": "demo", "metric": "MRR", "value": 0.3, "split": "demo", "ts": 1758213663}
+{"exp_id": "demo", "metric": "Latency.p50.ms", "value": 5.0, "split": "demo", "ts": 1758213663}
+{"exp_id": "demo", "metric": "Latency.p95.ms", "value": 5.0, "split": "demo", "ts": 1758213663}
+{"exp_id": "demo", "metric": "ECE.raw", "value": 0.2877658357222875, "split": "demo", "ts": 1758213663}
+{"exp_id": "demo", "metric": "ECE.cal", "value": 0.26054121305545175, "split": "demo", "ts": 1758213663}

@@ -3,6 +3,13 @@
 *_output.txt
 output.txt
 
+# Demo artifacts (generated locally)
+data/tiny/embeddings.npy
+experiments/vectors/*.npy
+experiments/runs/*/index/*
+!experiments/runs/*/index/.gitkeep
+!experiments/runs/*/index/README.md
+
 # Env
 .env
 

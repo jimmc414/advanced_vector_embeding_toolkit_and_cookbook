@@ -1,0 +1,25 @@
+model:
+  name: "dummy-encoder"
+index:
+  kind: "flatip"
+query_ops:
+  - op: "mmr"
+    lambda: 0.6
+    k: 10
+graph:
+  enable: false
+safety:
+  repellors: null
+  pii:
+    enable: false
+calibrate:
+  method: "temperature"
+  params: { }
+eval:
+  k: [10]
+  latency_trials: 10
+paths:
+  corpus: "data/tiny/corpus.jsonl"
+  output_dir: "experiments/runs/flatip_demo"
+seed: 24
+top_k: 10

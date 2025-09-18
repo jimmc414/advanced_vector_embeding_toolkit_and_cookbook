@@ -1,0 +1,5 @@
+{
+  "seed": 42,
+  "versions": {},
+  "config": "experiments/configs/demo.yaml"
+}
