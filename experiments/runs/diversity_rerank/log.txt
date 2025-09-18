@@ -1,0 +1,1 @@
+Lambda sweep shows λ=0.7 reduces intra-list cosine similarity by ~32% relative to dense-only reranking while keeping nDCG@10 within 2 points of baseline. λ<=0.5 drifts toward duplicates; λ>=0.8 costs too much relevance.

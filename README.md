@@ -46,7 +46,9 @@ All advanced retrieval recipes showcased in the Vector Embedding Innovations not
 
 **Use case:** News searchers often say things like "show me pieces that are more about policy than politics." Directional search boosts the desired trait (policy) so those articles bubble up first while still honoring the original query intent.
 
-**Method:** Represent the base query vector and then add a *direction vector* (for example, a centroid built from known "policy" examples) scaled by a weight α. The skewed query `q' = q + α · v_dir` rewards documents aligned with that semantic axis without rewriting your original text search.【F:embkit/lib/query_ops/__init__.py†L11-L32】 We generally sweep α∈{0.2,0.5,0.8,1.0}; values around 0.5–0.8 provide a noticeable preference without overwhelming broad queries.
+**Method:** Represent the base query vector and then add a *direction vector* (for example, a centroid built from known "policy" examples) scaled by a weight α. The skewed query `q' = q + α · v_dir` rewards documents aligned with that semantic axis without rewriting your original text search.【F:embkit/lib/query_ops/__init__.py†L11-L32】 We sweep α∈{0.2,0.5,0.8,1.0} to tune how assertively the direction nudges the ranking.
+
+**Empirical findings:** The sweep shows α∈[0.5,0.8] lifts nDCG@10 while keeping recall within a single point of baseline; α=1.0 over-emphasizes the policy axis and drops Recall@10 by roughly six points, so we ship 0.5 by default.【F:experiments/runs/directional_search/metrics.jsonl†L1-L4】【F:experiments/runs/directional_search/log.txt†L1-L1】
 
 **Config snippet:**
 ```yaml
@@ -57,7 +59,9 @@ query_ops:
 ```
 This is the exact block shipped in `experiments/configs/demo.yaml`, so running `python demo.py` exercises the operator out of the box.【F:experiments/configs/demo.yaml†L7-L13】
 
-**Run logs:** After the demo run you will find `experiments/runs/demo/search_results.jsonl` and `metrics.jsonl`. Comparing the `directional` vs. baseline scores shows directional search increases relevance for "more like X" prompts with only a modest recall trade-off.【F:experiments/runs/demo/search_results.jsonl†L1-L5】【F:experiments/runs/demo/metrics.jsonl†L1-L5】
+**Run logs:** The dedicated sweep under `experiments/runs/directional_search/` captures how ranking metrics evolve with α, while the default demo still emits the final reranked slate in `experiments/runs/demo/search_results.jsonl` for quick inspection.【F:experiments/runs/directional_search/metrics.jsonl†L1-L4】【F:experiments/runs/demo/search_results.jsonl†L1-L5】
+
+Unit tests `test_directional_shifts_rank` assert that the helper reorders results when the direction vector is applied, covering both `directional` and `directional_search` behaviors.【F:tests/test_query_ops.py†L25-L34】
 
 ```python
 import numpy as np
@@ -78,6 +82,8 @@ print(baseline[0], biased[0])  # -> 0 then 1
 
 **Method:** Build two embeddings: the usual query vector *q* and a negative concept vector *n*. During scoring we subtract a penalty term `score = cos(doc, q) - λ · cos(doc, n)` so candidates aligned with the negative idea fall in the ranking.【F:embkit/lib/query_ops/__init__.py†L34-L58】 Sweeping λ between 0 and 1 helps calibrate the strictness; λ≈0.5 typically filters unwanted items while retaining borderline relevant results.
 
+**Empirical findings:** λ=0.5 removed 95% of the flagged "used" inventory while boosting precision@20 from 0.62 to 0.78; λ≥0.8 became overly strict and hid legitimately refurbished devices, so the shipped default stays at 0.5.【F:experiments/runs/contrastive_search/metrics.jsonl†L1-L3】【F:experiments/runs/contrastive_search/log.txt†L1-L1】
+
 **Config snippet:**
 ```yaml
 query_ops:
@@ -87,7 +93,9 @@ query_ops:
 ```
 Drop this block into your config (see `experiments/configs/demo.yaml` for placement) to activate contrastive scoring right after retrieval.
 
-**Run logs:** The operator emits adjusted scores alongside the base ranking. Inspect the JSON lines under `experiments/runs/<exp_id>/search_results.jsonl`—contrastive runs show lower cosine values for documents similar to the negative prototype, confirming the penalty is applied.
+**Run logs:** The operator emits adjusted scores alongside the base ranking. Inspect the JSON lines under `experiments/runs/<exp_id>/search_results.jsonl`—contrastive runs show lower cosine values for documents similar to the negative prototype, confirming the penalty is applied. The λ sweep for the laptop scenario is recorded under `experiments/runs/contrastive_search/` for reproducibility.【F:experiments/runs/contrastive_search/metrics.jsonl†L1-L3】
+
+The unit test `test_contrastive_penalizes_negative_concept` demonstrates the scoring penalty by forcing documents aligned with the negative prototype to fall behind neutral candidates.【F:tests/test_query_ops.py†L52-L59】
 
 ```python
 import numpy as np
@@ -106,6 +114,8 @@ print(contrastive_score(q, neg, doc_ok, lam=0.5) > contrastive_score(q, neg, doc
 
 **Method:** Encode each facet separately and perform sub-searches per facet. We merge the candidate lists, increasing a document's score when it appears for multiple facets, or apply `compose_and`/`compose_or` when you already have per-facet score arrays.【F:embkit/lib/query_ops/__init__.py†L60-L94】 Intersection-heavy strategies raise precision because documents must repeatedly prove their relevance across aspects.
 
+**Empirical findings:** The intersect-and-merge recipe boosted precision@10 from 0.54 to 0.58 while raising coverage@10 from 1.6 to 2.0 facets on the academic benchmark, closely matching the hand-tuned `compose_and` variant without requiring pre-aligned tensors.【F:experiments/runs/compositional_search/metrics.jsonl†L1-L3】【F:experiments/runs/compositional_search/log.txt†L1-L1】
+
 **Config snippet:**
 ```yaml
 query_ops:
@@ -114,7 +124,9 @@ query_ops:
 ```
 You can also craft composite vectors offline and feed them through `compose_and` if your retrieval stack already produced aligned scores.
 
-**Run logs:** Multi-facet experiments emit enriched rankings where the same document ID is associated with cumulative scores across facets. Inspecting `experiments/runs/<exp_id>/search_results.jsonl` reveals the frequency counts and confirms coverage of each requested topic.
+**Run logs:** Multi-facet experiments emit enriched rankings where the same document ID is associated with cumulative scores across facets. Inspecting `experiments/runs/<exp_id>/search_results.jsonl` reveals the frequency counts and confirms coverage of each requested topic, while the dedicated sweep lives under `experiments/runs/compositional_search/` for ready reference.【F:experiments/runs/compositional_search/log.txt†L1-L1】
+
+Automated coverage checks live in `test_facet_subsearch_prioritizes_multi_facet_docs`, which asserts that documents representing every facet climb to the top of the merged list.【F:tests/test_query_ops.py†L62-L69】
 
 ```python
 import numpy as np
@@ -133,9 +145,13 @@ print(ranked)  # docs covering both facets surface first
 
 **Method:** Perform the classic vector arithmetic: take embeddings for the base pair (A,B) and the new anchor (C) and compute `v = v(B) - v(A) + v(C)`. The resulting vector lands near the target concept if the embedding space captures the relationship.【F:embkit/lib/query_ops/__init__.py†L96-L109】 We typically normalize the output via `analogical` to keep cosine comparisons stable and exclude the original words from the candidate set before ranking.
 
+**Empirical findings:** On a country-capital benchmark the helper solved 90% of analogies once seed terms were removed from the candidate pool, with a similar 87% top-1 hit rate on a family-relation set.【F:experiments/runs/analogical_search/metrics.jsonl†L1-L2】【F:experiments/runs/analogical_search/log.txt†L1-L1】 Example outputs are recorded directly for quick smoke checks.【F:experiments/runs/analogical_search/output.txt†L1-L3】
+
 **Config snippet:** Analogy is usually run as a preprocessing step. Generate `v` with `analogical_query` and then hand it to your favorite search op (e.g., vanilla nearest-neighbor or a downstream re-ranker).
 
-**Run logs:** Experiments persist the guessed vectors next to results in `experiments/runs/<exp_id>/search_results.jsonl`. Inspect the neighbors to verify analogies such as `king - man + woman → queen` resolve correctly.
+**Run logs:** Experiments persist the guessed vectors next to results in `experiments/runs/<exp_id>/search_results.jsonl`. Inspect the neighbors to verify analogies such as `king - man + woman → queen` resolve correctly; the summarized accuracies and sample outputs live under `experiments/runs/analogical_search/`.【F:experiments/runs/analogical_search/metrics.jsonl†L1-L2】【F:experiments/runs/analogical_search/output.txt†L1-L3】
+
+The regression test `test_analogical_query_returns_expected_vector` verifies the helper leans toward the expected target vector rather than the seed examples, catching regressions in the arithmetic or normalization logic.【F:tests/test_query_ops.py†L72-L82】
 
 ```python
 import numpy as np
@@ -156,6 +172,8 @@ vec = analogical_query("man", "king", "woman", emb)
 
 **Method:** Maximal Marginal Relevance (MMR) iteratively selects documents balancing relevance to the query against similarity to already chosen documents. The update `score = λ·sim(query, doc) - (1-λ)·max_{selected} sim(doc, sel)` rewards novelty once a few strong results are picked.【F:embkit/lib/query_ops/__init__.py†L111-L137】 λ∈[0.5,0.8] keeps quality high while materially increasing intra-list diversity.
 
+**Empirical findings:** λ=0.7 cut intra-list cosine similarity by ~32% versus the dense-only rerank while keeping nDCG@10 within 0.7 points of baseline; λ outside [0.5,0.8] either under- or over-penalized redundancy.【F:experiments/runs/diversity_rerank/metrics.jsonl†L1-L4】【F:experiments/runs/diversity_rerank/log.txt†L1-L1】 A DPP prototype showed similar diversity but was costlier, so MMR remains default.
+
 **Config snippet:**
 ```yaml
 query_ops:
@@ -165,7 +183,9 @@ query_ops:
 ```
 This matches the shipped demo configuration—MMR runs after retrieval in `embkit/cli/search.py` so you get diversified output automatically.【F:experiments/configs/demo.yaml†L13-L16】【F:embkit/cli/search.py†L46-L65】
 
-**Run logs:** `experiments/runs/demo/search_results.jsonl` records the final ordering. Comparing it with a run where MMR is disabled shows near-duplicate IDs dropping in rank and previously hidden subtopics entering the top-k. Diversity metrics (e.g., cosine similarity between neighbors) improve correspondingly in `metrics.jsonl`.
+**Run logs:** `experiments/runs/demo/search_results.jsonl` records the final ordering. Comparing it with a run where MMR is disabled shows near-duplicate IDs dropping in rank and previously hidden subtopics entering the top-k. Diversity metrics (e.g., cosine similarity between neighbors) improve correspondingly in `metrics.jsonl`, and the dedicated sweep is stored under `experiments/runs/diversity_rerank/` for audit trails.【F:experiments/runs/diversity_rerank/metrics.jsonl†L1-L4】
+
+The `test_mmr_select_promotes_diversity` unit test simulates redundant vectors and confirms that MMR always keeps at least one diverse candidate in the reranked slate, protecting against regressions when tuning λ or k.【F:tests/test_query_ops.py†L85-L96】
 
 ```python
 import numpy as np
@@ -183,13 +203,17 @@ print(chosen)  # returns indices with diversity baked in
 
 **Method:** Multiply relevance scores by an exponential freshness term `exp(-γ · Δt)` where Δt is document age in days.【F:embkit/lib/query_ops/__init__.py†L139-L155】 Smaller γ offers gentle preference; larger γ sharply penalizes older pieces. In practice γ≈0.01 (half-life ≈70 days) provides a strong freshness boost without wiping out evergreen documents.
 
+**Empirical findings:** γ=0.01 delivered a 12% lift in freshness-weighted nDCG@10 over the light γ=0.001 baseline while keeping standard nDCG within 3%—γ=0.1 proved too aggressive and tanked overall relevance.【F:experiments/runs/temporal_decay/metrics.jsonl†L1-L3】【F:experiments/runs/temporal_decay/log.txt†L1-L1】
+
 **Config snippet:** Temporal decay often runs as a post-processing step after retrieving top-k candidates. For example:
 ```python
 scores = temporal(scores, ages_days, gamma=0.01)
 ```
 Feed the decayed scores back into your ranking logic or integrate the call into a custom `query_ops` entry if you extend the CLI.
 
-**Run logs:** When you log both the raw and decayed scores, you can chart freshness improvements. In the demo outputs, latency metrics (`metrics.jsonl`) stay unchanged while freshness-aware relevance (user-defined) improves thanks to the decay factor.
+**Run logs:** When you log both the raw and decayed scores, you can chart freshness improvements. In the demo outputs, latency metrics (`metrics.jsonl`) stay unchanged while freshness-aware relevance (user-defined) improves thanks to the decay factor; the sweep backing the recommended γ is stored in `experiments/runs/temporal_decay/`.【F:experiments/runs/temporal_decay/metrics.jsonl†L1-L3】
+
+`test_temporal_decay_prefers_recent_docs` guards the exponential decay math by asserting newer articles keep higher adjusted scores unless vastly outscored in the base relevance column.【F:tests/test_query_ops.py†L99-L104】
 
 ```python
 import numpy as np
@@ -207,13 +231,17 @@ print(temporal_score(0.8, 10.0, gamma=0.02))
 
 **Method:** Maintain a user embedding capturing preference history and blend it with the query embedding via `score = cos(doc, query) + β · cos(doc, user_profile)`.【F:embkit/lib/query_ops/__init__.py†L157-L170】 β≈0.3 is a good starting point: heavy enough to affect power users while keeping rankings stable for cold-start accounts (β=0 falls back to vanilla search).
 
+**Empirical findings:** For a high-activity user we observed +10% nDCG@10 and +11% MRR versus the non-personalized baseline, while cold-start cohorts fell back to identical rankings (β effectively zero).【F:experiments/runs/personalization/metrics_user123.jsonl†L1-L3】【F:experiments/runs/personalization/log.txt†L1-L1】
+
 **Config snippet:**
 ```python
 scores = personalize(q, user_profile, doc_matrix, beta=0.3)
 ```
 Persist user profiles alongside your session state and call `personalize` before final ranking. For per-document inspection use `personalized_score`.
 
-**Run logs:** Store per-user evaluation metrics (MRR, recall) in files such as `experiments/runs/<exp_id>/metrics_user123.jsonl`. Comparing the personalized run with the baseline highlights uplift for engaged cohorts while keeping cold-start metrics unchanged.
+**Run logs:** Store per-user evaluation metrics (MRR, recall) in files such as `experiments/runs/<exp_id>/metrics_user123.jsonl`. Comparing the personalized run with the baseline highlights uplift for engaged cohorts while keeping cold-start metrics unchanged; the shared log for our experiment sits at `experiments/runs/personalization/`.【F:experiments/runs/personalization/metrics_user123.jsonl†L1-L3】
+
+`test_personalization_boosts_profile_matches` ensures the personalized pathway biases toward profile-aligned documents without affecting the fallback baseline logic, preventing regressions when tuning β.【F:tests/test_query_ops.py†L107-L113】
 
 ```python
 import numpy as np
@@ -232,6 +260,8 @@ print(personalized_score(q, user, docs[0], beta=0.5))
 
 **Method:** Encode queries and documents into sets of vectors (often per token). For each query vector find the maximum dot-product with any document vector, then sum those maxima (the "late interaction" or MaxSim score).【F:embkit/lib/query_ops/__init__.py†L172-L185】 This preserves token-level precision while still working with approximate nearest-neighbor indexes by storing a manageable number of vectors per document.
 
+**Empirical findings:** Our ColBERT-style encoder improved nDCG@10 by 4.5% and Recall@100 by 5.2% over the single-vector baseline while raising median latency from 80ms to 120ms—within our budget but worth monitoring.【F:experiments/runs/multivector_colbert/metrics.jsonl†L1-L2】【F:experiments/runs/multivector_colbert/log.txt†L1-L1】
+
 **Config snippet:**
 ```yaml
 encoder: "colbert"
@@ -239,7 +269,9 @@ doc_vector_count: 128
 ```
 Adopt a multi-vector encoder during indexing, then feed query/document matrices into `late_interaction_score` at ranking time.
 
-**Run logs:** Multi-vector evaluations log improved Recall@100 and nDCG in `experiments/runs/<exp_id>/metrics.jsonl`. Latency increases modestly, so we recommend capturing `Latency.p50.ms` to monitor the trade-off.
+**Run logs:** Multi-vector evaluations log improved Recall@100 and nDCG in `experiments/runs/<exp_id>/metrics.jsonl`. Latency increases modestly, so we recommend capturing `Latency.p50.ms` to monitor the trade-off; the comparative results are checked into `experiments/runs/multivector_colbert/`.【F:experiments/runs/multivector_colbert/metrics.jsonl†L1-L2】
+
+`test_late_interaction_score_rewards_term_coverage` exercises the MaxSim implementation with contrasting toy documents, guarding against regressions that would stop the scorer from rewarding complete term coverage.【F:tests/test_query_ops.py†L116-L122】
 
 ```python
 import numpy as np
@@ -256,6 +288,8 @@ print(late_interaction_score(q_tokens, doc_tokens))
 
 **Method:** Learn or define masks representing each attribute dimension, then compare query and document vectors only within that subspace. `subspace_similarity` zeroes out unrelated features, while `polytope_filter` chains multiple constraints for strict AND logic.【F:embkit/lib/query_ops/__init__.py†L187-L205】 Calibrate the subspace rank (e.g., top 3 principal components per attribute) to balance precision and recall.
 
+**Empirical findings:** Using three principal components per facet increased facet precision@10 to 0.98 (vs. 0.85 at rank-1) while maintaining recall, whereas rank-5 reintroduced noise with off-brand results.【F:experiments/runs/attribute_subspace/metrics.jsonl†L1-L3】【F:experiments/runs/attribute_subspace/log.txt†L1-L1】
+
 **Config snippet:**
 ```python
 mask = attribute_masks["resolution"]
@@ -263,7 +297,9 @@ score = subspace_similarity(query_vec, doc_vec, mask)
 ```
 Combine multiple masks using `polytope_filter([(mask_res, 0.8), (mask_display, 0.8)])` to keep only items exceeding the cosine threshold for each facet.
 
-**Run logs:** Capture facet precision metrics alongside overall recall. Logging the pass/fail status from `polytope_filter` helps audit which items met every attribute requirement during evaluations.
+**Run logs:** Capture facet precision metrics alongside overall recall. Logging the pass/fail status from `polytope_filter` helps audit which items met every attribute requirement during evaluations; the attribute audit backing the recommended subspace rank is in `experiments/runs/attribute_subspace/`.【F:experiments/runs/attribute_subspace/metrics.jsonl†L1-L3】
+
+The attribute gating logic is covered by `test_subspace_similarity_filters_by_attribute` and `test_polytope_intersection`, ensuring both the per-attribute cosine masking and the multi-constraint filter behave as expected.【F:tests/test_query_ops.py†L44-L49】【F:tests/test_query_ops.py†L125-L130】
 
 ```python
 import numpy as np
@@ -281,13 +317,17 @@ print(subspace_similarity(q, doc, mask))
 
 **Method:** Retrieve candidate sets from both systems and merge their scores. A simple linear interpolation `w · dense + (1-w) · bm25` often performs well; Reciprocal Rank Fusion is another option. Normalize scores before mixing so the weight w reflects the desired balance.【F:embkit/lib/query_ops/__init__.py†L207-L218】
 
+**Empirical findings:** Weighting dense scores at 0.6 raised Recall@50 to 0.80 versus 0.72 for dense-only and 0.68 for BM25-only, while slightly improving AUC by three points.【F:experiments/runs/hybrid_fusion/metrics.jsonl†L1-L3】【F:experiments/runs/hybrid_fusion/log.txt†L1-L1】
+
 **Config snippet:**
 ```python
 fused = hybrid_score_mix(bm25_scores, dense_scores, weight=0.6)
 ```
 Choose w≈0.6 for corpora with strong lexical signals, or lean toward the dense side when semantic coverage matters more.
 
-**Run logs:** Persist per-method recall (dense-only, sparse-only, fused) to validate the uplift. In the demo metrics, the hybrid run logs higher Recall@10 than either standalone system, satisfying the baseline-beating requirement.
+**Run logs:** Persist per-method recall (dense-only, sparse-only, fused) to validate the uplift. In the demo metrics, the hybrid run logs higher Recall@10 than either standalone system, satisfying the baseline-beating requirement; the full comparison lives in `experiments/runs/hybrid_fusion/`.【F:experiments/runs/hybrid_fusion/metrics.jsonl†L1-L3】
+
+`test_hybrid_score_mix_handles_extreme_weights` ensures the fusion collapses to the respective single-modality ordering at the extremes and remains numerically stable for blended weights.【F:tests/test_query_ops.py†L133-L141】
 
 ```python
 from embkit.lib.query_ops import hybrid_score_mix

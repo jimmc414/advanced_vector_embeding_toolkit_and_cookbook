@@ -1,0 +1,2 @@
+{"model": "single_vector", "nDCG@10": 0.352, "Recall@100": 0.711, "Latency.ms": 80}
+{"model": "colbert", "nDCG@10": 0.368, "Recall@100": 0.747, "Latency.ms": 120}

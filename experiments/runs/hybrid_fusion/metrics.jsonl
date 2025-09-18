@@ -1,0 +1,3 @@
+{"method": "dense", "Recall@50": 0.72, "AUC": 0.64}
+{"method": "bm25", "Recall@50": 0.68, "AUC": 0.62}
+{"method": "hybrid", "Recall@50": 0.80, "AUC": 0.67, "weight": 0.6}

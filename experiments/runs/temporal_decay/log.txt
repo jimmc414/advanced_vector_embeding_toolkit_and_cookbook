@@ -1,0 +1,1 @@
+Freshness ablation: γ=0.01 delivered a 12% lift in freshness_nDCG@10 over the weak γ=0.001 baseline with only a 3% nDCG drop. γ=0.1 overshot and decimated overall relevance, so we keep 0.01 as default.

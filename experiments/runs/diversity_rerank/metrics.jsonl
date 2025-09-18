@@ -1,0 +1,4 @@
+{"setting": "baseline_dense", "nDCG@10": 0.352, "intra_list_cosine": 0.57}
+{"setting": "mmr_lambda=0.5", "nDCG@10": 0.338, "intra_list_cosine": 0.46}
+{"setting": "mmr_lambda=0.7", "nDCG@10": 0.345, "intra_list_cosine": 0.39}
+{"setting": "mmr_lambda=0.8", "nDCG@10": 0.332, "intra_list_cosine": 0.34}
