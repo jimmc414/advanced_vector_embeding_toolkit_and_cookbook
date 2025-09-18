@@ -1,0 +1,26 @@
+model:
+  name: "dummy-encoder"
+index:
+  kind: "ivfpq"
+  params: { nlist: 64, m: 8, nbits: 8, nprobe: 8 }
+query_ops:
+  - op: "directional"; alpha: 0.5; vector_path: "experiments/vectors/v_dir.npy"
+  - op: "mmr"; lambda: 0.7; k: 10
+graph:
+  enable: true
+  k: 10
+  alpha: 0.15
+safety:
+  repellors: null
+  pii: { enable: true }
+calibrate:
+  method: "temperature"
+  params: { }
+eval:
+  k: [10, 100]
+  latency_trials: 20
+paths:
+  corpus: "data/tiny/corpus.jsonl"
+  output_dir: "experiments/runs/demo"
+seed: 42
+top_k: 10
