@@ -16,7 +16,10 @@ from ..lib.utils.demo_data import generate_tiny
 from ..lib.index.flatip import FlatIP
 from ..lib.index.ivfpq import IVFPQ
 
-app = typer.Typer(no_args_is_help=True, help="embkit index CLI")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="An Advanced Vector-Embedding Operations Toolkit and Cookbook index CLI",
+)
 
 @app.command("build")
 def build(config: str):

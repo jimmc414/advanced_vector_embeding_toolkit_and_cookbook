@@ -1,6 +1,6 @@
-# embkit
+# An Advanced Vector-Embedding Operations Toolkit and Cookbook
 
-CPU-only vector embedding toolkit with FAISS indexing, query ops, graph fusion, safety, calibration, and evaluation.
+An Advanced Vector-Embedding Operations Toolkit and Cookbook is a CPU-only vector embedding toolkit with FAISS indexing, query ops, graph fusion, safety, calibration, and evaluation.
 
 ## Setup
 ```bash
@@ -28,7 +28,7 @@ This will:
 
 ## Hugging Face encoder support (CPU-only)
 
-`embedding-kit` now ships with a factory that can spin up either the legacy
+An Advanced Vector-Embedding Operations Toolkit and Cookbook now ships with a factory that can spin up either the legacy
 deterministic `dummy-encoder` or a Hugging Face `sentence-transformers` model
 purely on CPU. The CLI keeps backward compatibility—existing configs that only
 specify `model.name: dummy-encoder` continue to work and still trigger the

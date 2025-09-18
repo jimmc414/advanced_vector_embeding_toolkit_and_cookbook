@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Complete demo showing embkit capabilities.
+Complete demo showing the capabilities of An Advanced Vector-Embedding Operations Toolkit and Cookbook.
 Runs a full pipeline and displays results.
 """
 

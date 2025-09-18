@@ -1,4 +1,4 @@
-# implementation.md — embkit
+# implementation.md — An Advanced Vector-Embedding Operations Toolkit and Cookbook
 
 This document is a complete, copy‑paste implementation guide. It includes file layout, code for every file, and commands to run. No external network calls. CPU‑only. Float32 everywhere. Deterministic.
 
@@ -1065,9 +1065,9 @@ if __name__ == "__main__":
 **README.md**
 
 ````md
-# embkit
+# An Advanced Vector-Embedding Operations Toolkit and Cookbook
 
-CPU-only vector embedding toolkit with FAISS indexing, query ops, graph fusion, safety, calibration, and evaluation.
+An Advanced Vector-Embedding Operations Toolkit and Cookbook is a CPU-only vector embedding toolkit with FAISS indexing, query ops, graph fusion, safety, calibration, and evaluation.
 
 ## Setup
 ```bash
@@ -1271,4 +1271,4 @@ make run EXP=demo
 * PII: regex covers emails, SSNs, common phones. Redaction occurs before output.
 * Calibration: temperature scaling minimizes NLL; `temperature_apply` outputs calibrated probabilities; ordering preserved.
 
-This document contains all code and guidance required to implement and run embkit end‑to‑end.
+This document contains all code and guidance required to implement and run An Advanced Vector-Embedding Operations Toolkit and Cookbook end‑to‑end.
