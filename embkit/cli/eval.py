@@ -18,7 +18,7 @@ def run(config: str):
     rows = read_jsonl(cfg.paths.corpus)
     qids = [f"q{i:03d}" for i in range(min(5, len(rows)))]
     rankings = {qid: [rows[i]["id"] for i in range(len(rows))][:10] for qid in qids}
-    labels = {qids[0]: set([rows[0]["id"]]), qids[1]: set([rows[1]["id"]])}
+    labels = {qid: {rows[i]["id"]} for i, qid in enumerate(qids) if i < len(rows)}
     times = {qid: 5.0 for qid in qids}
     ages = {qid: [0.0]*10 for qid in qids}
     metrics = compute_all(labels, rankings, times, ages)
