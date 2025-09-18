@@ -50,7 +50,15 @@ def build(config: str):
     else:
         raise typer.Exit(code=2)
 
-    meta = {"seed": cfg.seed, "versions": {}, "config": os.path.abspath(config)}
+    if os.path.isabs(config):
+        try:
+            cfg_path = os.path.relpath(config, os.getcwd())
+        except ValueError:
+            cfg_path = os.path.abspath(config)
+    else:
+        cfg_path = os.path.normpath(config)
+
+    meta = {"seed": cfg.seed, "versions": {}, "config": cfg_path}
     with open(os.path.join(cfg.paths.output_dir, "build_meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
     typer.echo("Index build complete.")
