@@ -1,0 +1,1 @@
+A/B summary: engaged profile user123 saw +10% nDCG@10 and +11% MRR relative to baseline. Cold-start cohorts fall back to the shared ranking (no regression observed).

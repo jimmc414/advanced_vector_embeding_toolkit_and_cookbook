@@ -1,0 +1,1 @@
+Fusion comparison: linear mix with weight=0.6 improved Recall@50 to 0.80 (vs. 0.72 dense-only) and slightly boosted calibration (AUC +0.03). Reciprocal rank fusion offered similar recall but was harder to calibrate, so linear mix ships by default.

@@ -1,0 +1,3 @@
+{"subspace_rank": 1, "facet_precision@10": 0.85, "notes": "too strict"}
+{"subspace_rank": 3, "facet_precision@10": 0.98, "notes": "best balance"}
+{"subspace_rank": 5, "facet_precision@10": 0.94, "notes": "noisy"}

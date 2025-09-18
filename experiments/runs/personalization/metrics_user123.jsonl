@@ -1,0 +1,3 @@
+{"user_id": "user123", "metric": "nDCG@10", "baseline": 0.42, "personalized": 0.46}
+{"user_id": "user123", "metric": "MRR", "baseline": 0.37, "personalized": 0.41}
+{"user_id": "cold_start", "metric": "nDCG@10", "baseline": 0.33, "personalized": 0.33}

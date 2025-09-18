@@ -1,0 +1,2 @@
+{"benchmark": "country-capital", "top1_accuracy": 0.90, "excluded_terms": true}
+{"benchmark": "family-relations", "top1_accuracy": 0.87, "excluded_terms": true}

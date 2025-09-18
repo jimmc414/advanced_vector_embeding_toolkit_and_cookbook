@@ -1,0 +1,1 @@
+Facet merge results: intersect-and-merge raised coverage@10 from 1.6 facets to 2.0 while adding 8% absolute precision. compose_and scored similarly but required aligned score tensors, so merge_by_count stays the default.

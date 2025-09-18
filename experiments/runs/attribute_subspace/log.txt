@@ -1,0 +1,1 @@
+Attribute audit: requiring 3 principal components per facet yielded 100% compliance on the 4K OLED slice versus 85% for the baseline similarity search. Higher ranks diluted precision with off-brand panels.

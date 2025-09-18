@@ -1,0 +1,1 @@
+Late interaction experiment: ColBERT-style encoding beat the single-vector baseline by +4.5% nDCG@10 and +5.2% Recall@100. Query latency rose to 120ms (from 80ms) but remained within budget.

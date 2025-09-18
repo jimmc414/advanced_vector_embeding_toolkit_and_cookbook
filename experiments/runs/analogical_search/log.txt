@@ -1,0 +1,1 @@
+Evaluation summary: 90% of country-capital analogies resolved correctly after removing seed tokens from the candidate pool. Errors typically involved ambiguous city-state pairs.
