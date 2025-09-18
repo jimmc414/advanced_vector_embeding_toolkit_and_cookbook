@@ -11,7 +11,10 @@ from ..lib.query_ops import directional, mmr, contrastive
 from ..lib.safety.pii import pii_redact, pii_contains
 from ..lib.safety.repellors import apply_repellors
 
-app = typer.Typer(no_args_is_help=True, help="embkit search CLI")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="An Advanced Vector-Embedding Operations Toolkit and Cookbook search CLI",
+)
 
 def _load_index(kind: str, path: str):
     p = os.path.join(path, "index")

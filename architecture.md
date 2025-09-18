@@ -1,8 +1,8 @@
-# embkit Architecture
+# An Advanced Vector-Embedding Operations Toolkit and Cookbook Architecture
 
 ## 1. Intent
 
-Deliver a deterministic, CPU‑only toolkit for advanced vector retrieval. Provide core indexing, query algebra, graph fusion, safety, calibration, and evaluation with fast CLIs and unit tests. No network access. Float32 everywhere.
+Deliver An Advanced Vector-Embedding Operations Toolkit and Cookbook as a deterministic, CPU‑only toolkit for advanced vector retrieval. Provide core indexing, query algebra, graph fusion, safety, calibration, and evaluation with fast CLIs and unit tests. No network access. Float32 everywhere.
 
 ## 2. System boundary
 

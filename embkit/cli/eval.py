@@ -7,7 +7,10 @@ from ..lib.utils import set_determinism, set_num_threads, read_jsonl
 from ..lib.eval.metrics import compute_all, expected_calibration_error, brier_score
 from ..lib.calibrate.temperature import temperature_fit, temperature_apply
 
-app = typer.Typer(no_args_is_help=True, help="embkit eval CLI")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="An Advanced Vector-Embedding Operations Toolkit and Cookbook eval CLI",
+)
 
 @app.command("run")
 def run(config: str):

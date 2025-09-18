@@ -1,8 +1,8 @@
-# embkit Requirements
+# An Advanced Vector-Embedding Operations Toolkit and Cookbook Requirements
 
 ## 1. Purpose and Scope
 
-* The system **shall** implement a modular vector-embedding toolkit that goes beyond plain similarity search.
+* An Advanced Vector-Embedding Operations Toolkit and Cookbook **shall** implement a modular vector-embedding toolkit that goes beyond plain similarity search.
 * The toolkit **shall** include core models, FAISS indexing, query algebra operations, graph fusion, safety, calibration, evaluation, CLIs, tests, and a tiny quickstart dataset.
 * The v1 scope **shall** target single-host CPU, Python 3.11, float32 everywhere, and no internet calls.
 
