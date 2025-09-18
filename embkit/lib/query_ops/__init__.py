@@ -250,3 +250,45 @@ def fair_rerank(
 def vector_join_and(results: Sequence[Sequence[Tuple[int | str, float]]]) -> List[Tuple[int | str, float, int]]:
     """Convenience wrapper enforcing strict AND semantics."""
     return vector_join(results, min_hits=len(results) if results else 0)
+
+def merge_generative_dense(
+    generative: Sequence[Tuple[int | str, float]],
+    dense_scores: Mapping[int | str, float],
+    weight: float = 0.5,
+    top_k: int | None = None,
+) -> List[Tuple[int | str, float]]:
+    """Fuse generative ID proposals with dense similarity scores."""
+    if top_k is None:
+        top_k = len(generative) if generative else len(dense_scores)
+    if top_k is None or top_k <= 0:
+        return []
+    weight = float(np.clip(weight, 0.0, 1.0))
+    gen_best: dict[int | str, float] = {}
+    for rank, (doc_id, score) in enumerate(generative):
+        adjusted = float(score)
+        if doc_id not in gen_best or adjusted > gen_best[doc_id]:
+            gen_best[doc_id] = adjusted
+    dense_map = {doc: float(score) for doc, score in dense_scores.items()}
+    all_docs = set(gen_best) | set(dense_map)
+    if not all_docs:
+        return []
+
+    def _normalize(values: Mapping[int | str, float]) -> dict[int | str, float]:
+        if not values:
+            return {}
+        arr = np.array(list(values.values()), dtype=np.float32)
+        scale = float(np.max(np.abs(arr)))
+        if scale < 1e-6:
+            return {doc: 0.0 for doc in values}
+        return {doc: float(val) / scale for doc, val in values.items()}
+
+    gen_norm = _normalize(gen_best)
+    dense_norm = _normalize(dense_map)
+
+    fused: List[Tuple[int | str, float]] = []
+    for doc in all_docs:
+        g = gen_norm.get(doc, 0.0)
+        d = dense_norm.get(doc, 0.0)
+        fused.append((doc, weight * d + (1.0 - weight) * g))
+    fused.sort(key=lambda x: -x[1])
+    return fused[: min(top_k, len(fused))]

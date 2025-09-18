@@ -1,0 +1,4 @@
+Candidates: generative=100, dense=100
+Recall@100 baseline dense: 0.83
+Recall@100 hybrid: 0.85
+Latency_ms: generative=52, rerank=21

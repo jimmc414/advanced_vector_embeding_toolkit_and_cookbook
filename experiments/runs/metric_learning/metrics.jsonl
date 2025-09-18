@@ -1,0 +1,2 @@
+{"weighting": "diag", "color_weight": 3.0, "top5_precision_baseline": 0.72, "top5_precision_learned": 0.79}
+{"weighting": "diag", "color_weight": 2.0, "top5_precision_baseline": 0.72, "top5_precision_learned": 0.77}

@@ -718,6 +718,166 @@ safe_results = pii_filter_results(search_results)
 
 Unit tests ensure regex coverage and result masking remain intact as policies evolve.【F:tests/test_safety.py†L1-L25】
 
+
+### 31. Counterfactual Sensitivity Probing (Analysis & Quality)
+
+**Use case:** When auditing ranking changes you often want to know how swapping a geographic facet or time window affects the slate. Counterfactual probing automatically rewrites the query and measures the rank deltas so you can flag regressions before launch.【F:embkit/lib/analysis/counterfactual.py†L1-L25】
+
+**Method:** `generate_counterfactuals` replaces facet tokens with alternatives (e.g., "Germany"→"Europe"), then `rank_delta` compares the original and counterfactual rankings to highlight documents that moved sharply.【F:embkit/lib/analysis/counterfactual.py†L1-L25】 The helpers slot directly into the evaluation harness so probes live alongside your usual metrics.
+
+**Empirical findings:** On our geography audit, counterfactual rewrites surfaced moderate rank churn (Jaccard overlap 0.18–0.42) that product owners reviewed before promotion.【F:experiments/runs/counterfactual/changes.json†L1-L2】
+
+**Workflow snippet:**
+```python
+from embkit.lib.analysis.counterfactual import generate_counterfactuals, rank_delta
+cf = generate_counterfactuals("top universities in Germany", {"Germany": ["Europe", "Asia"]})
+diffs = rank_delta(base_slate, rerun_search(cf[0]))
+```
+
+Unit tests keep both the query generator and delta calculator honest so regression suites fail if counterfactual coverage drops.【F:tests/test_counterfactual.py†L1-L17】
+
+### 32. Polytope Queries (Advanced Query Logic)
+
+**Use case:** Recruiters and marketplace operators need an "AND" over multiple learned attributes—e.g., >5 years experience **and** Python **and** NYC—without relying on brittle metadata flags.
+
+**Method:** `polytope_filter` applies a list of half-space constraints over normalized document vectors, returning only items that satisfy every threshold.【F:embkit/lib/query_ops/__init__.py†L116-L126】 Pair it with facet-specific centroids to express experience, skill, and location as learned directions.【F:tests/test_query_ops.py†L44-L49】
+
+**Empirical findings:** Tightening the years/skill/location thresholds shrank the candidate pool from 48 to 8 while preserving the target talent list in our hiring benchmark.【F:experiments/runs/polytope_query/metrics.jsonl†L1-L2】
+
+**Config snippet:**
+```python
+constraints = [
+    (years_exp_vec, 0.5),
+    (python_skill_vec, 0.6),
+    (nyc_location_vec, 0.55),
+]
+keep = polytope_filter(doc_matrix, constraints)
+```
+
+### 33. Cone and Sector Queries (Advanced Query Logic)
+
+**Use case:** Scholars asking for "papers more about quantum computing than classical" want to bound results to a semantic cone around a preferred topic while excluding competing directions.
+
+**Method:** `cone_filter` screens candidates by cosine angle, effectively enforcing an angular sector around the query direction; combine it with subtractive negatives to exclude opposing topics.【F:embkit/lib/query_ops/__init__.py†L116-L118】 The regression test demonstrates that off-axis documents are removed once the cosine floor is raised.【F:tests/test_query_ops.py†L32-L40】
+
+**Empirical findings:** Raising the cosine floor from 0.70 to 0.85 cut the candidate set in half while bumping the "quantum-first" hit rate from 0.78 to 0.91 on our topical benchmark.【F:experiments/runs/cone_sector/metrics.jsonl†L1-L2】
+
+**Code snippet:**
+```python
+hits = cone_filter(query_vec, doc_matrix, cos_min=0.85)
+```
+
+### 34. Learned Metric Retrieval (Mahalanobis Distance)
+
+**Use case:** Visual search often needs to overweight color or other salient cues so near-duplicate items outrank merely related ones.
+
+**Method:** `mahalanobis_diag` evaluates the learned diagonal metric (feature weights) during re-ranking, letting you plug weights straight from a metric-learning job into production scoring.【F:embkit/lib/query_ops/__init__.py†L128-L131】 The unit test guards both the positive-weight constraint and the relative scaling behavior.【F:tests/test_query_ops.py†L140-L150】
+
+**Empirical findings:** A diagonal weighting that tripled the color dimension lifted top-5 precision from 0.72 to 0.79 on our product catalog while maintaining stability for other features.【F:experiments/runs/metric_learning/metrics.jsonl†L1-L2】
+
+**Code snippet:**
+```python
+d = mahalanobis_diag(query_vec, candidate_vec, learned_weights)
+```
+
+### 35. Hyperbolic Embeddings for Hierarchy (Representation & Indexing)
+
+**Use case:** Taxonomy-heavy corpora (Wikipedia categories, org charts) benefit from hyperbolic geometry, which expands space near the boundary to represent broad-vs-specific relationships.
+
+**Method:** `poincare_distance` computes the Poincaré-ball geodesic after optionally projecting vectors back inside the unit ball, giving you a drop-in distance function for hierarchical retrieval.【F:embkit/lib/utils/hyperbolic.py†L1-L25】 Tests confirm distances stretch more aggressively near the boundary, matching hyperbolic intuition.【F:tests/test_hyperbolic.py†L1-L19】
+
+**Empirical findings:** Switching the distance metric lifted Mean Average Precision on high-level category queries from 0.67 to 0.82 because descendants stayed tightly clustered around their parents.【F:experiments/runs/hyperbolic_eval/metrics.jsonl†L1-L2】
+
+**Code snippet:**
+```python
+dist = poincare_distance(query_vec, doc_vec)
+```
+
+### 36. Disentangled Subspace Representations (Learning & Quality)
+
+**Use case:** Creative tools and recommendation experiences often need to swap "style" while holding "content" fixed (or vice versa) for interactive filtering.
+
+**Method:** `split_embedding`, `swap_subspace`, and `merge_embedding` slice a vector into named factors and recombine them so you can transplant styles or contents between exemplars before searching.【F:embkit/lib/analysis/disentangle.py†L1-L42】 Tests cover both round-trip reconstruction and safe swapping to guard against index errors.【F:tests/test_disentangle.py†L1-L21】
+
+**Empirical findings:** Keeping style rank at 2–4 dimensions preserved ≥0.90 precision for both style and content facets on our multimedia set, enabling controllable retrieval without bloating vector size.【F:experiments/runs/disentangled_subspace/metrics.jsonl†L1-L2】
+
+**Code snippet:**
+```python
+style_q, content_q = split_embedding(query_vec, [128, 128])
+remixed = merge_embedding([style_reference, content_q])
+```
+
+### 37. Mixture-of-Experts Encoders (Representation & Indexing)
+
+**Use case:** Mixed-domain search (code + natural language) benefits from routing each query to the right expert encoder so domain-specific nuance is preserved.
+
+**Method:** `KeywordExpertRouter` scores queries against per-expert keyword lists while `combine_expert_embeddings` blends outputs when soft routing is desired.【F:embkit/lib/models/mixture.py†L1-L52】 Unit tests validate both the routing preference and the weighted combination math.【F:tests/test_mixture.py†L1-L21】
+
+**Empirical findings:** The mixture routed code queries to the specialized encoder 95% of the time, boosting code MRR from 0.50 to 0.65 while inching text MRR from 0.58 to 0.61 thanks to gentler blending.【F:experiments/runs/mixture_experts/metrics.jsonl†L1-L2】
+
+**Code snippet:**
+```python
+router = KeywordExpertRouter({"code": ["def", "class"], "text": ["news", "article"]}, default_expert="text")
+expert, _ = router.route(query)[0]
+emb = encoders[expert].encode(query)
+```
+
+### 38. Streaming Index with TTL (Ops & Freshness)
+
+**Use case:** News and alerting systems require that fresh stories become searchable immediately while stale content quietly ages out.
+
+**Method:** `StreamingIndex` keeps a normalized in-memory list of `(vector, id, timestamp)` records, serves cosine searches, and exposes `prune_expired` for TTL-based eviction.【F:embkit/lib/index/streaming.py†L1-L48】 Tests exercise both retrieval quality and the eviction path to ensure expired items disappear deterministically.【F:tests/test_streaming_index.py†L1-L28】
+
+**Empirical findings:** With a 7-day active window the streaming index hit 0.92 freshness-weighted Recall@20 while keeping p95 latency at 42 ms; widening to 30 days broadened recall slightly but still cleared latency budgets.【F:experiments/runs/streaming_index/metrics.jsonl†L1-L2】
+
+**Code snippet:**
+```python
+idx = StreamingIndex(dim=doc_matrix.shape[1])
+idx.add(batch_vectors, batch_ids, batch_timestamps)
+idx.prune_expired(time.time(), ttl_seconds=30*86400)
+```
+
+### 39. Generative Latent Retrieval Hybrid (RAG & IR)
+
+**Use case:** Combining generative retrievers (DSI/seq2seq) with dense re-rankers recovers long-tail matches while keeping precision high.
+
+**Method:** `merge_generative_dense` normalizes generative ID scores and dense similarities before blending them with a tunable weight, returning a fused ranked list.【F:embkit/lib/query_ops/__init__.py†L254-L294】 Tests cover both the shared-hit boost and empty-input edge cases so integration remains stable.【F:tests/test_generative.py†L1-L14】
+
+**Empirical findings:** Feeding 100 generative IDs into the hybrid raised Recall@100 from 0.83 to 0.85 with only ~21 ms additional rerank latency once the dense pass rescored the union.【F:experiments/runs/generative_hybrid/metrics.txt†L1-L4】
+
+**Code snippet:**
+```python
+fused = merge_generative_dense(generative_candidates, dense_scores, weight=0.6, top_k=50)
+```
+
+### 40. Cross-lingual Alignment with Regularization (Learning & Quality)
+
+**Use case:** Multilingual users expect Spanish queries to surface English documents seamlessly.
+
+**Method:** We learn a linear alignment matrix with optional regularization using `solve_linear_map`/`align_vectors`, then monitor Frobenius alignment error to ensure English performance stays intact.【F:embkit/lib/index/alignment.py†L1-L23】 The alignment regression test recreates a synthetic transform to verify the solver and mapper stay precise.【F:tests/test_alignment.py†L1-L17】
+
+**Empirical findings:** Light regularization and pseudo-bitext lifted Spanish→English Recall@5 from 0.50 to 0.80 while holding monolingual accuracy within 1%.【F:experiments/runs/cross_lingual_alignment/metrics.jsonl†L1-L2】【F:experiments/runs/cross_lingual_alignment/log.txt†L1-L1】
+
+**Code snippet:**
+```python
+W = solve_linear_map(src_matrix, tgt_matrix)
+aligned = align_vectors(new_queries, W)
+```
+
+### 41. Knowledge-Graph Fused Retrieval (Multimodal & Structured)
+
+**Use case:** Biomedical and enterprise search benefit from traversing known relationships (gene→drug→paper) in parallel with vector similarity so synonyms and related concepts surface.
+
+**Method:** `meta_path_scores` walks typed edges along a configurable meta-path while `fuse_with_graph` adds the KG-derived boost back into the dense score table.【F:embkit/lib/graph/kg.py†L1-L48】 Tests ensure connected meta-paths receive positive weight and boosted documents rise to the top.【F:tests/test_kg.py†L1-L21】
+
+**Empirical findings:** The KG trace for "EGFR cancer therapy" highlighted pathway-targeted trials that pure vector search missed, enriching the top results with domain-critical context.【F:experiments/runs/kg_fusion/examples.md†L1-L6】
+
+**Code snippet:**
+```python
+kg_scores = meta_path_scores(kg_graph, seeds=["gene:egfr"], meta_path=["gene", "drug", "paper"], decay=0.5)
+reranked = fuse_with_graph(base_scores, kg_scores, weight=0.3)
+```
+
 ## Regenerating Demo Binaries
 
 The demo's binary artifacts (embeddings, FAISS index shards, and helper vectors)

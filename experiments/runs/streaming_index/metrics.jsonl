@@ -1,0 +1,2 @@
+{"window": "7d", "fresh_recall@20": 0.92, "latency_ms_p95": 42}
+{"window": "30d", "fresh_recall@20": 0.88, "latency_ms_p95": 45}

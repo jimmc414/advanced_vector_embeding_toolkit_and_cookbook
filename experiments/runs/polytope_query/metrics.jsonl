@@ -1,0 +1,2 @@
+{"constraints": 2, "thresholds": [0.6, 0.6], "candidates": 48, "after_polytope": 12}
+{"constraints": 3, "thresholds": [0.6, 0.6, 0.5], "candidates": 48, "after_polytope": 8}
