@@ -49,13 +49,17 @@ def read_jsonl(path: str) -> List[dict]:
     return out
 
 def write_jsonl(path: str, rows: Iterable[dict]) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 def save_npy(path: str, arr: np.ndarray) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     np.save(path, arr.astype(np.float32, copy=False))
 
 def load_npy(path: str) -> np.ndarray:

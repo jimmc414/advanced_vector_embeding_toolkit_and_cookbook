@@ -5,7 +5,9 @@ from . import l2n, write_jsonl, save_npy, set_determinism
 
 def generate_tiny(path_corpus: str, path_emb: str, n: int = 200, d: int = 32, seed: int = 42) -> None:
     set_determinism(seed)
-    os.makedirs(os.path.dirname(path_corpus), exist_ok=True)
+    directory = os.path.dirname(path_corpus)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     ids = []
     rows = []
     t0 = int(time.time())
@@ -33,5 +35,6 @@ def generate_tiny(path_corpus: str, path_emb: str, n: int = 200, d: int = 32, se
     D = l2n(X2 @ W, axis=1)
     write_jsonl(path_corpus, rows)
     save_npy(path_emb, D)
-    with open(os.path.join(os.path.dirname(path_corpus), "ids.txt"), "w", encoding="utf-8") as f:
+    ids_path = os.path.join(directory, "ids.txt") if directory else "ids.txt"
+    with open(ids_path, "w", encoding="utf-8") as f:
         for s in ids: f.write(s+"\n")
