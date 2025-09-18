@@ -1,0 +1,6 @@
+# fanout=1 latency (ms)
+p50: 120.3
+p95: 182.4
+# fanout=2 latency (ms)
+p50: 49.8
+p95: 88.1

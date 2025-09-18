@@ -1,0 +1,2 @@
+{"metric": "AND_precision@10", "baseline": 0.58, "vector_join": 0.7}
+{"metric": "Intersection_rate", "value": 0.82}

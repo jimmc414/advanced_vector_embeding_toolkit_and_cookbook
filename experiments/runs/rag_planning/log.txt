@@ -1,0 +1,3 @@
+Q1: "president of France born in 1977" -> doc: Emmanuel Macron profile
+Q2: "Emmanuel Macron elected year" -> answer snippet includes "2017"
+recall@1 (multi-hop): 0.89 (baseline single-hop: 0.64)

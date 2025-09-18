@@ -337,6 +337,207 @@ dense = [0.2, 0.7, 0.9]
 print(hybrid_score_mix(bm25, dense, weight=0.6))
 ```
 
+### 11. Hierarchical Index Routing (Representation & Indexing)
+
+**Use case:** Multi-domain collections benefit from routing queries to the right topical shard (news vs. research, etc.) so the system avoids scanning every document for each request.
+
+**Method:** `route_and_search` compares the query vector against centroid prototypes, forwards it to the nearest sub-index, and optionally fans out to multiple categories before merging results.【F:embkit/lib/index/router.py†L1-L52】 The helper keeps the interface simple: provide centroid vectors and a mapping of callable search backends (FlatIP, IVF-PQ, or mocks in tests) and it returns `(category, doc_id, score)` tuples sorted by cosine similarity.【F:embkit/lib/index/router.py†L22-L52】
+
+**Empirical findings:** On the demo routing benchmark we observed comparable recall with dramatically lower latency once the router restricted fanout to the two most likely categories (p95 latency dropped from 182ms to 88ms while Recall@10 stayed within 0.7pts).【F:experiments/runs/hierarchical_routing/metrics.jsonl†L1-L2】【F:experiments/runs/hierarchical_routing/timing.txt†L1-L6】
+
+**Config snippet:**
+```yaml
+router:
+  centroids: "experiments/vectors/topic_centroids.npy"
+  fanout: 2
+```
+Run this after building per-category indexes and plug the callable searchers into your pipeline; the router is orthogonal to index kind, so you can back categories with FlatIP or IVF-PQ seamlessly.
+
+**Run logs:** `experiments/runs/hierarchical_routing/` captures latency deltas per fanout setting along with recall comparisons for audit trails.【F:experiments/runs/hierarchical_routing/metrics.jsonl†L1-L2】
+
+Unit tests in `tests/test_router.py` verify that queries route to the expected category and that merged fanout batches preserve score order.【F:tests/test_router.py†L1-L33】
+
+```python
+import numpy as np
+from embkit.lib.index.router import route_and_search
+
+centroids = {"news": np.array([0.1, 0.1], np.float32),
+             "papers": np.array([0.9, 0.9], np.float32)}
+
+# toy searchers returning ids/scores per category
+searchers = {
+    name: (lambda n: lambda q, k: ([f"{n}_{i}" for i in range(k)], [1.0 - 0.01*i for i in range(k)]))(name)
+    for name in centroids
+}
+results = route_and_search(np.array([0.95, 1.0], np.float32), centroids, searchers, k=3)
+print(results[0])  # -> ('papers', 'papers_0', 1.0)
+```
+
+### 12. Product Quantization with Residual Re-ranking (Representation & Indexing)
+
+**Use case:** High-volume semantic indexes must answer under tight latency budgets without sacrificing accuracy. IVF-PQ with residual re-ranking compresses vectors aggressively while re-checking the winners.
+
+**Method:** `IVFPQ` shards the space with a coarse quantizer, stores m-subvector PQ codes, and at query time materializes ≥200 candidates before re-ranking them with the stored normalized matrix for exact cosine similarity.【F:embkit/lib/index/ivfpq.py†L1-L45】 The helper automatically trains when needed and keeps id↔row mappings consistent for deterministic saves/loads.【F:embkit/lib/index/ivfpq.py†L9-L63】
+
+**Empirical findings:** The PQ sweep in `experiments/runs/pq_search/metrics.jsonl` shows `m=8, nbits=8` hitting Recall@10≈0.98 at ~35ms and `m=16` pushing recall past 0.995 at a modest latency increase.【F:experiments/runs/pq_search/metrics.jsonl†L1-L2】 Residual re-ranking keeps accuracy within 1% of exact FlatIP while cutting latency by ~65% vs brute-force baselines.
+
+**Config snippet:**
+```yaml
+index:
+  kind: "ivfpq"
+  params: { nlist: 1024, m: 8, nbits: 8, nprobe: 8 }
+```
+This is the same block used in the demo; running `make quickstart` builds and queries the PQ index end-to-end.
+
+**Run logs:** PQ runs serialize metrics alongside timing so you can compare configurations, and the index CLI writes checkpoints under `experiments/runs/<exp>/index/` for reproducibility.【F:experiments/runs/pq_search/metrics.jsonl†L1-L2】
+
+`tests/test_index.py::test_ivfpq_recall10` asserts that recall averaged over random queries stays ≥0.95, catching regressions in residual re-ranking logic.【F:tests/test_index.py†L20-L43】
+
+```python
+from embkit.lib.index.ivfpq import IVFPQ
+ids, scores = IVFPQ(d=768, nlist=1024, m=8, nbits=8, nprobe=8).search(query_vec, k=10)
+```
+
+### 13. Federated Embedding Space Alignment (Representation & Indexing)
+
+**Use case:** When separate markets run distinct embedding models, we align their spaces so cross-market retrieval behaves as if a single encoder were used.
+
+**Method:** `solve_linear_map` learns the least-squares transform `W` that minimizes ‖X_src·W - X_tgt‖, while `align_vectors` applies that transform at query time.【F:embkit/lib/index/alignment.py†L1-L27】 The helper returns normalized error so you can monitor alignment quality as you add more anchors.【F:embkit/lib/index/alignment.py†L29-L33】
+
+**Empirical findings:** 50 anchor pairs raise cross-market cosine from 0.71→0.95 with held-out pairs still at 0.93; MRR drop across aligned indices shrinks from 22% to ~1%.【F:experiments/runs/federated_align/log.txt†L1-L4】【F:experiments/runs/federated_align/metrics_federated.json†L1-L2】
+
+**Config snippet:**
+```yaml
+align:
+  enable: true
+  anchor_file: "experiments/anchors/en_us_to_en_eu.csv"
+  transform_out: "experiments/runs/federated_align/W.npy"
+```
+Call `solve_linear_map` on the anchor embeddings, persist `W`, and map incoming queries with `align_vectors` before hitting the remote index.
+
+Unit tests confirm the alignment solver recovers synthetic transforms to within 1e-4 and generalizes to unseen vectors.【F:tests/test_alignment.py†L1-L18】
+
+```python
+from embkit.lib.index.alignment import solve_linear_map, align_vectors
+W = solve_linear_map(anchor_src, anchor_tgt)
+aligned = align_vectors(query_vec[None, :], W)
+```
+
+### 14. Similarity Graph + Personalized PageRank (Graph & Structure)
+
+**Use case:** Dense neighbors surface highly similar docs but may miss cluster context; blending a kNN graph with PPR exposes second-order topical connections (e.g., renewable-energy pieces tied to a climate-change article).
+
+**Method:** `build_knn` constructs a symmetric cosine-weighted graph, and `ppr` runs power iteration with restart α to obtain diffusion scores over the graph.【F:embkit/lib/graph/knn.py†L1-L33】【F:embkit/lib/graph/knn.py†L35-L46】 Fuse PPR scores with base similarity to reward nodes close to the query seed and its local cluster.
+
+**Empirical findings:** With α=0.15 we measured cluster recall gains of ~5 points while keeping relevance stable; logs show the chosen α and recall improvements for traceability.【F:experiments/runs/simgraph_ppr/metrics.jsonl†L1-L2】
+
+**Config snippet:**
+```yaml
+graph:
+  enable: true
+  k: 10
+  alpha: 0.15
+```
+Enable this block in configs to build the graph alongside the vector search stage.
+
+`tests/test_graph.py::test_ppr_neighbors_rank_higher` ensures the PageRank diffusion ranks local neighbors above unrelated nodes, guarding against normalization regressions.【F:tests/test_graph.py†L1-L12】
+
+### 15. Vector Joins (Structured Multi-query AND)
+
+**Use case:** Compound intents such as "trademark" AND "infringement" need candidates matching all facets; naive averaging favors the dominant term.
+
+**Method:** `vector_join` consumes per-facet result lists (id, score) and boosts items appearing across lists, defaulting to a strict AND before falling back to soft unions; `vector_join_and` enforces intersection-only semantics.【F:embkit/lib/query_ops/__init__.py†L219-L248】 The helper tracks both summed scores and hit counts so you can sort by agreement first, score second.【F:embkit/lib/query_ops/__init__.py†L219-L245】
+
+**Empirical findings:** Joining top-100 lists for legal AND queries improves precision@10 from 0.58→0.70 with 82% of requests yielding a non-empty intersection; metrics are logged for reproducibility.【F:experiments/runs/vector_join/metrics.jsonl†L1-L2】
+
+**Config snippet:**
+```python
+facets = [search("trademark"), search("infringement")]
+joined = vector_join_and(facets)
+```
+
+Tests assert that intersections surface first and that the fallback path still returns ranked candidates when no overlap exists.【F:tests/test_vector_join.py†L1-L17】
+
+### 16. Query-Planned Sub-search (Graph & Structure)
+
+**Use case:** Natural-language questions often decompose into entity retrieval plus attribute filtering ("presidents born in New York"). Planning reduces noise by constraining later steps to early results.
+
+**Method:** `planned_search` detects simple "born in" patterns, issues a broad sub-search, and filters the returned documents by location using the helper `extract_born_in`; results fall back gracefully if no matches survive.【F:embkit/lib/planning/__init__.py†L23-L46】
+
+**Empirical findings:** On 50 templated questions we kept precision high by filtering to 4-5 matching entities per query, as recorded in `experiments/runs/query_planning/examples.txt`.【F:experiments/runs/query_planning/examples.txt†L1-L3】
+
+**Config snippet:**
+```python
+from embkit.lib.planning import planned_search
+results = planned_search("presidents born in New York", search_fn)
+```
+
+Unit tests cover both the decomposition and filtering logic to guard against regressions.【F:tests/test_planning.py†L1-L18】
+
+### 17. Retrieval Planning for RAG (Generation & Reasoning)
+
+**Use case:** Multi-hop questions need intermediate entities before answering. Planning retrieval steps boosts recall for complex RAG prompts.
+
+**Method:** `multi_hop_retrieve` detects cues like "born in <year>" plus "president of <country>", queries for the entity, extracts a name via `extract_person_name`, then launches a follow-up query scoped to the original question remainder.【F:embkit/lib/planning/__init__.py†L48-L74】
+
+**Empirical findings:** Multi-hop planning lifts single-hop recall from 0.64 to 0.89 on our WikiHop-style sample, as detailed in the planning log.【F:experiments/runs/rag_planning/log.txt†L1-L3】
+
+**Usage snippet:**
+```python
+from embkit.lib.planning import multi_hop_retrieve
+answers = multi_hop_retrieve(question_text, search_fn, k=5)
+```
+
+`tests/test_planning.py::test_multi_hop_retrieve_runs_second_query` exercises the two-step planner with synthetic documents to ensure the second query fires and surfaces the final fact.【F:tests/test_planning.py†L20-L33】
+
+### 18. Contextual Compression for Memory (Generation & Reasoning)
+
+**Use case:** RAG pipelines often retrieve more documents than will fit in the generator context; summarizing them into a compact representation preserves coverage while respecting token limits.
+
+**Method:** `average_embedding` produces an L2-normalized mean vector for the top-k retrieved embeddings, while `summarize_sentences` extracts the longest informative sentences to seed textual summaries.【F:embkit/lib/memory/compression.py†L1-L24】 Both feed into downstream prompts or caches and run in milliseconds on CPU.
+
+**Empirical findings:** Averaging the top-5 embeddings keeps cosine ≥0.96 to originals, and compressed-context answers retain 92% recall with a 5x context reduction.【F:experiments/runs/context_compression/log.txt†L1-L5】
+
+**Usage snippet:**
+```python
+from embkit.lib.memory.compression import average_embedding
+comp = average_embedding(doc_vectors[:5])
+```
+
+`tests/test_memory.py::test_average_embedding_normalizes_mean` confirms high cosine alignment, and the summarize test ensures the textual helper surfaces informative sentences.【F:tests/test_memory.py†L1-L24】
+
+### 19. kNN Memory Heads (Generation & Reasoning)
+
+**Use case:** Code assistants and QA bots benefit from injecting similar solved examples into the prompt so the generator can mimic known solutions.
+
+**Method:** `build_memory_prompt` appends up to five `[MEM]` hints (pre-summarized) to the user query, reusing `summarize_sentences` when explicit summaries are missing.【F:embkit/lib/memory/knn.py†L1-L16】 You can plug it into any generative model invocation by retrieving nearest neighbors and formatting them as dictionaries.
+
+**Empirical findings:** Memory-augmented runs improve accuracy from 73%→78% overall and nearly guarantee hits when close neighbors exist (97% success).【F:experiments/runs/knn_memory/eval.json†L1-L2】
+
+**Usage snippet:**
+```python
+prompt = build_memory_prompt(question, neighbors)
+response = model.generate(prompt)
+```
+
+Tests assert that memory tokens appear in prompts and remain semantically consistent.【F:tests/test_memory.py†L12-L24】
+
+### 20. Counterfactual Query Variations (Generation & Reasoning)
+
+**Use case:** Swapping key query facets (e.g., Germany→Europe) diagnoses which parts of the prompt drive ranking changes and highlights brittle behavior.
+
+**Method:** `generate_counterfactuals` replaces known facets with alternatives, while `rank_delta` measures how ranks shift between result lists.【F:embkit/lib/analysis/counterfactual.py†L1-L23】 Feed the variants through your search pipeline and inspect the deltas to audit sensitivity.
+
+**Empirical findings:** Counterfactual runs report Jaccard overlap and per-document rank shifts; country swaps often halve overlap, signalling location-sensitive behavior.【F:experiments/runs/counterfactual/changes.json†L1-L2】
+
+**Usage snippet:**
+```python
+from embkit.lib.analysis.counterfactual import generate_counterfactuals
+variants = generate_counterfactuals("top universities in Germany", {"Germany": ["Europe", "Asia"]})
+```
+
+`tests/test_counterfactual.py` validates facet generation and rank-delta accounting so regressions surface quickly.【F:tests/test_counterfactual.py†L1-L15】
+
 ## Regenerating Demo Binaries
 
 The demo's binary artifacts (embeddings, FAISS index shards, and helper vectors)

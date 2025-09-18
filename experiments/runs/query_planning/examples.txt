@@ -1,0 +1,3 @@
+Query: presidents born in New York
+Phase1: retrieved 100 presidents
+Phase2: filtered to 4 born in New York (Roosevelt, Trump, Van Buren, Fillmore)

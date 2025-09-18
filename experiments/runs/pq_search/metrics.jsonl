@@ -1,0 +1,2 @@
+{"config": {"m": 8, "nbits": 8, "nprobe": 8}, "Recall@10": 0.98, "Latency.ms": 35.2}
+{"config": {"m": 16, "nbits": 8, "nprobe": 12}, "Recall@10": 0.995, "Latency.ms": 45.8}

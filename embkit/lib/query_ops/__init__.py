@@ -168,3 +168,36 @@ def hybrid_score_mix(bm25_scores: Sequence[float], dense_scores: Sequence[float]
     w = float(weight)
     fused = w * dense_norm + (1.0 - w) * bm25_norm
     return fused.astype(np.float32).tolist()
+
+
+def vector_join(results: Sequence[Sequence[Tuple[int | str, float]]], min_hits: int | None = None) -> List[Tuple[int | str, float, int]]:
+    """Aggregate multi-query results, prioritizing documents shared across lists."""
+    if len(results) == 0:
+        return []
+    if min_hits is None:
+        min_hits = len(results)
+    agg: dict[int | str, Tuple[float, int]] = {}
+    for slate in results:
+        seen: set[int | str] = set()
+        for doc_id, score in slate:
+            if doc_id in seen:
+                continue
+            tot, cnt = agg.get(doc_id, (0.0, 0))
+            agg[doc_id] = (tot + float(score), cnt + 1)
+            seen.add(doc_id)
+    ranked = [
+        (doc_id, total, count)
+        for doc_id, (total, count) in agg.items()
+        if count >= min_hits
+    ]
+    if ranked:
+        ranked.sort(key=lambda x: (-x[2], -x[1]))
+        return ranked
+    fallback = [(doc_id, total, count) for doc_id, (total, count) in agg.items()]
+    fallback.sort(key=lambda x: (-x[2], -x[1]))
+    return fallback
+
+
+def vector_join_and(results: Sequence[Sequence[Tuple[int | str, float]]]) -> List[Tuple[int | str, float, int]]:
+    """Convenience wrapper enforcing strict AND semantics."""
+    return vector_join(results, min_hits=len(results) if results else 0)

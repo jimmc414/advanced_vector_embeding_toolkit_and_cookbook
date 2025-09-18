@@ -1,0 +1,5 @@
+query_id: support-42
+original_docs: 5
+compressed_cosine_mean: 0.96
+answer_recall_full: 0.95
+answer_recall_compressed: 0.92

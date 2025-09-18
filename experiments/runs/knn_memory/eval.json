@@ -1,0 +1,2 @@
+{"metric": "Accuracy", "baseline": 0.73, "with_memory": 0.78}
+{"metric": "Hit_rate_when_neighbor_exists", "value": 0.97}

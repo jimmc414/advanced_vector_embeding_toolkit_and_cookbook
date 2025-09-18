@@ -1,0 +1,2 @@
+{"metric": "ClusterRecall@10", "baseline": 0.68, "ppr": 0.73}
+{"metric": "alpha", "value": 0.15}
