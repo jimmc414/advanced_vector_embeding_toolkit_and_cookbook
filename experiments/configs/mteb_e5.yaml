@@ -1,0 +1,13 @@
+model:
+  provider: "huggingface"
+  name: "e5-mistral"
+  batch_size: 16
+  max_length: 512
+index:
+  kind: "flatip"
+paths:
+  corpus: "data/mteb/corpus.jsonl"
+  embeddings: "data/mteb/e5_embeddings.npy"
+  output_dir: "experiments/runs/mteb_e5"
+seed: 42
+top_k: 10

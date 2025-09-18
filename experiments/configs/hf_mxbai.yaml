@@ -1,0 +1,18 @@
+model:
+  provider: "huggingface"
+  name: "mxbai-large"
+  batch_size: 32
+  max_length: 512
+index:
+  kind: "ivfpq"
+  params:
+    nlist: 2048
+    m: 32
+    nbits: 8
+    nprobe: 16
+paths:
+  corpus: "data/custom/corpus.jsonl"
+  embeddings: "data/custom/mxbai_embeddings.npy"
+  output_dir: "experiments/runs/hf_mxbai"
+seed: 123
+top_k: 20

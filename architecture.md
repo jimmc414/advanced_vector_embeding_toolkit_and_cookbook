@@ -25,13 +25,15 @@ Deliver a deterministic, CPU‑only toolkit for advanced vector retrieval. Provi
 
 * Corpus JSONL: one record per line with `id`, `text`, optional `ts` (epoch seconds), optional `group`.
 * Embeddings: float32 arrays. Docs matrix shape `(n, d)`. Query vector shape `(d,)`. Multi‑vector doc as list of `(m_i, d)`.
+  When Hugging Face encoders are enabled we cache the raw matrix to `paths.embeddings` before L2 normalization.
 * All embeddings L2‑normalized before any inner‑product search.
 * Id map: contiguous zero‑based integer row ids ↔ external string ids.
 
 ## 5. Component map
 
 * `lib/utils`: seeding, normalization, IO, timers, dtype checks, thread caps, config hashing.
-* `lib/models`: encoder adapters. v1 uses dummy/cached embeddings and pass‑through normalizers. Stubs for multi‑vector encoders.
+* `lib/models`: encoder factory bridging the deterministic dummy encoder and CPU Hugging Face adapters with alias registry,
+  batch helpers, and L2 normalization.
 * `lib/index`: FlatIP exact; IVFPQ with residual exact re‑rank; artifact load/save; id mapping.
 * `lib/query_ops`: scoring transforms, logical composition, filters, re‑rankers.
 * `lib/graph`: kNN graph build (cosine), PPR power iteration, score fusion.
@@ -46,7 +48,8 @@ Deliver a deterministic, CPU‑only toolkit for advanced vector retrieval. Provi
 
 1. CLI parses YAML. Pydantic validates schema and semantics. Fail fast on any invalid field.
 2. Utils set seeds and cap BLAS threads. Record seed, versions, config hash.
-3. IO loads corpus and optional embeddings. If absent, generate synthetic demo.
+3. IO loads corpus and optional embeddings. If absent, generate synthetic demo; when `provider: huggingface`, batch encode on
+   CPU, persist embeddings, and backfill any missing ids.
 4. Index layer builds or loads FAISS index and id map.
 5. Search:
 
@@ -116,8 +119,9 @@ Deliver a deterministic, CPU‑only toolkit for advanced vector retrieval. Provi
 
 ## 13. Determinism tactics
 
-* Seeds: Python, NumPy, scikit‑learn set at process start; FAISS RNG seeded.
-* Threads: cap OpenMP/MKL/OpenBLAS to 1. Document the environment variables in logs.
+* Seeds: Python, NumPy, scikit‑learn set at process start; FAISS RNG seeded; PyTorch seeded when Hugging Face encoders are
+  instantiated.
+* Threads: cap OpenMP/MKL/OpenBLAS to 1. Document the environment variables in logs. Force PyTorch to a single CPU thread.
 * KMeans or clustering parameters set with fixed `n_init` and `random_state`.
 * Any sampling order is fixed. Any shuffling is seeded.
 * Rationale: reproducible runs for CI and acceptance tests.
@@ -142,13 +146,17 @@ Deliver a deterministic, CPU‑only toolkit for advanced vector retrieval. Provi
 
 * Pydantic models enforce types, ranges, and cross‑field constraints.
 * Required keys: `model.name`, `index.kind`, `paths.corpus`, `paths.output_dir`.
+* Optional Hugging Face knobs: `model.provider`, `model.batch_size`, `model.max_length`, `model.cache_dir`, `model.revision`,
+  and `paths.embeddings`.
 * Conditional requirements: `index.params` present for `ivfpq`.
 * File existence checks occur before execution. Fail fast with clear messages.
 
 ## 17. CLIs
 
-* `index build`: read config, prepare embeddings, build index, persist artifacts and metadata.
-* `search run`: load index and vectors, run pipeline, print top‑k, write results with redaction if enabled.
+* `index build`: read config, prepare embeddings (reusing dummy vectors or encoding via Hugging Face), build index, persist
+  artifacts and model metadata.
+* `search run`: load index and vectors, instantiate encoder via factory, run pipeline, print top‑k, write results with redaction
+  if enabled.
 * `eval run`: execute metrics suite and latency harness, write JSONL.
 * Non‑interactive, deterministic, nonzero exit on any validation failure.
 
