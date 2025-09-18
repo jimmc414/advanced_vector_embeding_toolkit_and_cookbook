@@ -65,7 +65,8 @@ def load_config(path: str) -> Config:
     with open(path, "r", encoding="utf-8") as f:
         y = yaml.safe_load(f)
     cfg = Config(**y)
-    if not os.path.exists(cfg.paths.corpus):
-        os.makedirs(os.path.dirname(cfg.paths.corpus), exist_ok=True)
+    corpus_dir = os.path.dirname(cfg.paths.corpus)
+    if corpus_dir and not os.path.exists(corpus_dir):
+        os.makedirs(corpus_dir, exist_ok=True)
     os.makedirs(cfg.paths.output_dir, exist_ok=True)
     return cfg
