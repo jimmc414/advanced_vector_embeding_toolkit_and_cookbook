@@ -3,8 +3,8 @@ import os, json
 import typer
 import numpy as np
 from .config import load_config
-from ..lib.utils import set_determinism, set_num_threads, read_jsonl
-from ..lib.models.dummy import DummyEncoder
+from ..lib.models import create_encoder
+from ..lib.utils import read_jsonl, set_determinism, set_num_threads
 from ..lib.index.flatip import FlatIP
 from ..lib.index.ivfpq import IVFPQ
 from ..lib.query_ops import directional, mmr, contrastive
@@ -30,8 +30,12 @@ def run(config: str, query: str, k: int = 10):
 
     # embedding for query
     emb_dim = int(getattr(idx, "d", 32))
-    enc = DummyEncoder(d=emb_dim, seed=cfg.seed)
-    q = enc.encode_query(query)
+    try:
+        enc = create_encoder(cfg.model, seed=cfg.seed, dimension=emb_dim)
+    except RuntimeError as exc:
+        typer.echo(str(exc))
+        raise typer.Exit(code=2) from exc
+    q = enc.encode_queries([query])[0]
 
     ids, scores = idx.search(q, k=max(k, 50))
     scores = np.array(scores, dtype=np.float32)

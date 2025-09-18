@@ -1,9 +1,15 @@
 from __future__ import annotations
-from typing import Literal, Optional, List, Dict, Any
-from pydantic import BaseModel, field_validator
-import yaml, os
+from typing import Any, Dict, List, Literal, Optional
+
+import os
+
+import yaml
+from pydantic import BaseModel, ValidationInfo, field_validator
+
+from ..lib.models import MODEL_REGISTRY
 
 IndexKind = Literal["flatip", "ivfpq"]
+
 
 class IndexParams(BaseModel):
     nlist: int
@@ -11,8 +17,31 @@ class IndexParams(BaseModel):
     nbits: int
     nprobe: int
 
+
 class ModelCfg(BaseModel):
-    name: str
+    provider: Literal["dummy", "huggingface"] = "dummy"
+    name: str = "dummy-encoder"
+    batch_size: int = 32
+    max_length: int = 512
+    cache_dir: Optional[str] = None
+    revision: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, v: str, info: ValidationInfo) -> str:
+        provider = info.data.get("provider", "dummy")
+        if provider == "huggingface":
+            if v in MODEL_REGISTRY or "/" in v:
+                return v
+            raise ValueError(f"Unknown Hugging Face model alias: {v}")
+        return v
+
+    @field_validator("batch_size", "max_length")
+    @classmethod
+    def _check_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("batch_size and max_length must be positive")
+        return v
 
 class IndexCfg(BaseModel):
     kind: IndexKind
@@ -41,6 +70,7 @@ class EvalCfg(BaseModel):
 class PathsCfg(BaseModel):
     corpus: str
     output_dir: str
+    embeddings: Optional[str] = None
 
 class Config(BaseModel):
     model: ModelCfg
@@ -69,4 +99,8 @@ def load_config(path: str) -> Config:
     if corpus_dir and not os.path.exists(corpus_dir):
         os.makedirs(corpus_dir, exist_ok=True)
     os.makedirs(cfg.paths.output_dir, exist_ok=True)
+    if cfg.paths.embeddings:
+        emb_dir = os.path.dirname(cfg.paths.embeddings)
+        if emb_dir and not os.path.exists(emb_dir):
+            os.makedirs(emb_dir, exist_ok=True)
     return cfg

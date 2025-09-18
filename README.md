@@ -26,6 +26,54 @@ This will:
 4. Execute evaluation metrics
 5. Display results
 
+## Hugging Face encoder support (CPU-only)
+
+`embedding-kit` now ships with a factory that can spin up either the legacy
+deterministic `dummy-encoder` or a Hugging Face `sentence-transformers` model
+purely on CPU. The CLI keeps backward compatibility—existing configs that only
+specify `model.name: dummy-encoder` continue to work and still trigger the
+synthetic quickstart path.
+
+### Selecting a model
+
+Choose the provider and friendly name inside your YAML config:
+
+```yaml
+model:
+  provider: huggingface
+  name: e5-mistral         # alias → intfloat/e5-mistral-7b-instruct
+  batch_size: 16           # optional, defaults to 32
+  max_length: 512          # optional, defaults to 512 tokens
+paths:
+  corpus: data/my_corpus.jsonl
+  embeddings: data/my_embeddings.npy
+  output_dir: experiments/runs/my_run
+```
+
+The alias registry includes `e5-mistral`, `mxbai-large`, `sfr-mistral`,
+`gist-embedding`, and `gte-large`. You can also pass any full
+`org/model-name` string directly. When `provider: huggingface` is selected the
+index build will batch encode the corpus on CPU, save raw embeddings to the
+`paths.embeddings` location, normalize vectors for FAISS, and record metadata in
+`build_meta.json` for reproducibility.【F:embkit/cli/index.py†L19-L118】【F:experiments/configs/mteb_e5.yaml†L1-L12】
+
+### Offline caching
+
+Set `model.cache_dir` (forwarded to Hugging Face) plus `paths.embeddings` to
+reuse downloads and skip recomputation. If embeddings already exist, the build
+command will reuse them; otherwise vectors are computed and persisted for future
+runs. When IDs are missing in the corpus we auto-generate deterministic
+`doc_00000` style identifiers and write them back to the JSONL so downstream
+search has a stable mapping.【F:embkit/cli/index.py†L73-L107】
+
+### CPU resource considerations
+
+Everything runs on CPU. We explicitly cap PyTorch to a single thread and seed it
+for deterministic results, so expect encoding throughput comparable to a
+single-core CPU inference pass. Install the extra dependencies with `pip install
+-r requirements.txt`; the pinned versions correspond to the CPU wheels of
+`torch`, `transformers`, `sentence-transformers`, and `huggingface-hub`.【F:embkit/lib/models/hf.py†L26-L86】【F:requirements.txt†L1-L14】
+
 ## Expected Outputs
 
 After running the quickstart, you'll find:
