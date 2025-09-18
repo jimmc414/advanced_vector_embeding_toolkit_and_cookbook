@@ -1,0 +1,2 @@
+{"metric": "Recall@10", "baseline": 0.972, "routed": 0.965}
+{"metric": "Latency.p95.ms", "baseline": 182.4, "routed": 88.1}

@@ -1,0 +1,4 @@
+anchors: 50 pairs
+initial cosine: 0.71
+final cosine: 0.95
+heldout cosine: 0.93

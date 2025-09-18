@@ -1,0 +1,2 @@
+{"query": "top universities in Germany", "counterfactual": "top universities in Europe", "jaccard": 0.42}
+{"query": "population of Germany in 2020", "counterfactual": "population of Europe in 2020", "jaccard": 0.18}
