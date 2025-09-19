@@ -2,30 +2,6 @@
 
 An Advanced Vector-Embedding Operations Toolkit and Cookbook is a CPU-only vector embedding toolkit with FAISS indexing, query ops, graph fusion, safety, calibration, and evaluation.
 
-## Setup
-```bash
-make setup
-```
-
-## Quickstart
-```bash
-make quickstart
-```
-
-## Quick Demo
-
-For a complete walkthrough with real outputs:
-```bash
-python demo.py
-```
-
-This will:
-1. Generate synthetic data
-2. Build an IVF-PQ index
-3. Run a sample search query
-4. Execute evaluation metrics
-5. Display results
-
 ## Hugging Face encoder support (CPU-only)
 
 An Advanced Vector-Embedding Operations Toolkit and Cookbook now ships with a factory that can spin up either the legacy
@@ -925,6 +901,30 @@ aligned = align_vectors(new_queries, W)
 kg_scores = meta_path_scores(kg_graph, seeds=["gene:egfr"], meta_path=["gene", "drug", "paper"], decay=0.5)
 reranked = fuse_with_graph(base_scores, kg_scores, weight=0.3)
 ```
+## Setup
+```bash
+make setup
+```
+
+## Quickstart
+```bash
+make quickstart
+```
+
+## Quick Demo
+
+For a complete walkthrough with real outputs:
+```bash
+python demo.py
+```
+
+This will:
+1. Generate synthetic data
+2. Build an IVF-PQ index
+3. Run a sample search query
+4. Execute evaluation metrics
+5. Display results
+
 
 ## Regenerating Demo Binaries
 
