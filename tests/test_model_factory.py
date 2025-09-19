@@ -17,6 +17,17 @@ def test_create_encoder_returns_dummy_encoder(monkeypatch):
     assert np.allclose(norms, 1.0, atol=1e-5)
 
 
+def test_dummy_encoder_produces_stable_vectors_across_instances():
+    text = "Deterministic hashing"
+    enc1 = DummyEncoder(d=16, seed=777)
+    enc2 = DummyEncoder(d=16, seed=777)
+
+    vec1 = enc1.encode_document(text)
+    vec2 = enc2.encode_document(text)
+
+    np.testing.assert_array_equal(vec1, vec2)
+
+
 def test_create_encoder_hf_uses_registry(monkeypatch):
     created = {}
 
