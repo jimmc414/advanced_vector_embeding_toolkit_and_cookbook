@@ -18,11 +18,25 @@ class FlatIP:
         Dn = l2n(D, axis=1)
         if len(ids) != Dn.shape[0]:
             raise ValueError("ids length mismatch")
+        if Dn.shape[0] == 0:
+            return
+
         self.index.add(Dn)
-        self._ids = list(ids)
-        self._D = Dn
+
+        if self._D is None:
+            self._D = Dn.copy()
+        else:
+            self._D = np.concatenate([self._D, Dn], axis=0)
+
+        if not self._ids:
+            self._ids = list(ids)
+        else:
+            self._ids.extend(ids)
 
     def search(self, q: np.ndarray, k: int) -> Tuple[List[str], np.ndarray]:
+        if k <= 0 or not self._ids:
+            return [], np.array([], dtype=np.float32)
+
         qn = l2n(q.astype(np.float32), axis=None)[None, :]
         sims, I = self.index.search(qn, min(k, len(self._ids)))
         idx = I[0]
