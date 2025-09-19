@@ -18,6 +18,11 @@ class IVFPQ:
     def train_add(self, D: np.ndarray, ids: List[str]) -> None:
         if D.dtype != np.float32: D = D.astype(np.float32)
         Dn = l2n(D, axis=1)
+        if len(ids) != Dn.shape[0]:
+            raise ValueError("ids length mismatch")
+        if Dn.shape[0] == 0:
+            return
+
         if not self.index.is_trained:
             train = Dn
             needed = max(self.nlist, int(self.index.pq.ksub))
@@ -26,10 +31,11 @@ class IVFPQ:
                 train = np.tile(train, (reps, 1))[:needed]
             self.index.train(train)
         self.index.add(Dn)
-        self._D = Dn
-        if len(ids) != Dn.shape[0]:
-            raise ValueError("ids length mismatch")
-        self._ids = list(ids)
+        if self._D is None:
+            self._D = Dn.copy()
+        else:
+            self._D = np.concatenate([self._D, Dn], axis=0)
+        self._ids.extend(ids)
 
     def search(self, q: np.ndarray, k: int) -> Tuple[List[str], np.ndarray]:
         if self._D is None: return [], np.array([], dtype=np.float32)
