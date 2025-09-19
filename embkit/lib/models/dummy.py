@@ -2,24 +2,35 @@ from __future__ import annotations
 
 from typing import Iterable, Sequence
 
+import hashlib
 import numpy as np
 
 from ..utils import l2n, set_determinism
 
 
 class DummyEncoder:
-    """Deterministic hash 3-gram encoder for queries/documents."""
+    """Deterministic hash 3-gram encoder for queries/documents.
+
+    The encoder uses a seed-keyed BLAKE2b digest to map trigrams into
+    buckets, ensuring reproducible bucket selection across processes without
+    relying on ``PYTHONHASHSEED``.
+    """
 
     def __init__(self, d: int = 32, seed: int = 42):
         set_determinism(seed)
         self.d = int(d)
+        self.seed = int(seed)
+        self._hash_key = str(self.seed).encode("utf-8")
 
     def _encode(self, text: str) -> np.ndarray:
         v = np.zeros(self.d, dtype=np.float32)
         t = f"##{text.lower()}##"
         for i in range(len(t) - 2):
             tri = t[i : i + 3]
-            h = hash(tri) % self.d
+            digest = hashlib.blake2b(
+                tri.encode("utf-8"), key=self._hash_key, digest_size=8
+            ).digest()
+            h = int.from_bytes(digest, "big") % self.d
             v[h] += 1.0
         return l2n(v, axis=None)
 
