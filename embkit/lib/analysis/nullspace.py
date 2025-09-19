@@ -32,8 +32,21 @@ def remove_directions(vecs: np.ndarray, directions: np.ndarray) -> np.ndarray:
     D = _prepare_vectors(directions)
     if D.size == 0:
         return V.copy()
-    B = l2n(D, axis=1)
-    projection = V - (V @ B.T) @ B
+    V64 = V.astype(np.float64, copy=False)
+    B = l2n(D, axis=1).astype(np.float64, copy=False)
+
+    # Orthonormalize the direction matrix so repeated or dependent
+    # directions do not compound during projection.
+    _, s, Vh = np.linalg.svd(B, full_matrices=False)
+    if s.size == 0:
+        return V.astype(np.float32, copy=True)
+    tol = np.finfo(s.dtype).eps * max(B.shape) * s[0]
+    rank = int(np.sum(s > tol))
+    if rank == 0:
+        return V.astype(np.float32, copy=True)
+    Q = Vh[:rank].T
+
+    projection = V64 - (V64 @ Q) @ Q.T
     return projection.astype(np.float32)
 
 
