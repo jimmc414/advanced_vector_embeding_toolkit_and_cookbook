@@ -76,9 +76,9 @@ def run(config: str, query: str, k: int = 10):
                             re_sc.append((cand_index[doc_id], float(score)))
                 if re_sc:
                     re_sc.sort(key=lambda x: -x[1])
-                    keep = [idx for idx, _ in re_sc[: min(k, len(re_sc))]]
-                    ids = [ids[i] for i in keep]
-                    scores = np.array([scores[i] for i in keep], dtype=np.float32)
+                    top = re_sc[: min(k, len(re_sc))]
+                    ids = [ids[idx] for idx, _ in top]
+                    scores = np.array([score for _, score in top], dtype=np.float32)
             elif name == "mmr":
                 cand_rows = [id_to_row.get(doc_id, -1) for doc_id in ids]
                 valid = [i for i, row in enumerate(cand_rows) if row >= 0]
