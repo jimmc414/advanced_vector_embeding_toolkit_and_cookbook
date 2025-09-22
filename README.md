@@ -36,11 +36,13 @@ index build will batch encode the corpus on CPU, save raw embeddings to the
 ### Offline caching
 
 Set `model.cache_dir` (forwarded to Hugging Face) plus `paths.embeddings` to
-reuse downloads and skip recomputation. If embeddings already exist, the build
-command will reuse them; otherwise vectors are computed and persisted for future
-runs. When IDs are missing in the corpus we auto-generate deterministic
-`doc_00000` style identifiers and write them back to the JSONL so downstream
-search has a stable mapping.【F:embkit/cli/index.py†L73-L107】
+reuse downloads and skip recomputation. When an embeddings file already exists
+the CLI validates that the cached array has one row per corpus entry and, when
+`ids.txt` is present, that the stored identifiers line up with the JSONL. Any
+mismatch triggers a fresh encode so vectors never drift from the source data.
+When IDs are missing in the corpus we auto-generate deterministic `doc_00000`
+style identifiers and write them back to the JSONL so downstream search has a
+stable mapping.【F:embkit/cli/index.py†L73-L118】
 
 ### CPU resource considerations
 
