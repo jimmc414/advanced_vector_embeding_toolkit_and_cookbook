@@ -52,20 +52,57 @@ def build(config: str):
         if len(corpus) == 0:
             typer.echo("Corpus is empty; cannot encode with Hugging Face model.")
             raise typer.Exit(code=2)
-        encoder = create_encoder(cfg.model, seed=cfg.seed)
-        texts = [row.get("text", "") for row in corpus]
+
+        texts = []
         ids = []
         updated = False
         for i, row in enumerate(corpus):
+            texts.append(row.get("text", ""))
             doc_id = row.get("id") or f"doc_{i:05d}"
             ids.append(doc_id)
             if "id" not in row:
                 row["id"] = doc_id
                 updated = True
-        D = encoder.encode_documents(texts)
-        if D.shape[0] != len(ids):
-            raise typer.Exit(code=2)
-        save_npy(emb_path, D)
+
+        D = None
+        if os.path.exists(emb_path):
+            try:
+                cached = load_npy(emb_path)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                typer.echo(f"Failed to load cached embeddings from {emb_path}: {exc}")
+            else:
+                if cached.ndim != 2:
+                    typer.echo("Cached embeddings must be a 2D array; recomputing.")
+                elif cached.shape[0] != len(ids):
+                    typer.echo(
+                        "Cached embeddings do not match corpus size; recomputing."
+                    )
+                else:
+                    ids_match = True
+                    if os.path.exists(ids_path):
+                        try:
+                            with open(ids_path, "r", encoding="utf-8") as f:
+                                stored_ids = [ln.strip() for ln in f if ln.strip()]
+                        except OSError as exc:  # pragma: no cover - defensive logging
+                            typer.echo(
+                                f"Failed to read stored IDs from {ids_path}: {exc}"
+                            )
+                            ids_match = False
+                        else:
+                            if len(stored_ids) != len(ids) or stored_ids != ids:
+                                ids_match = False
+                    if ids_match:
+                        D = cached
+                        typer.echo("Loaded cached embeddings from disk.")
+                    else:
+                        typer.echo("Cached embeddings IDs mismatch corpus; recomputing.")
+
+        if D is None:
+            encoder = create_encoder(cfg.model, seed=cfg.seed)
+            D = encoder.encode_documents(texts)
+            if D.shape[0] != len(ids):
+                raise typer.Exit(code=2)
+            save_npy(emb_path, D)
         if updated:
             write_jsonl(cfg.paths.corpus, corpus)
         with open(ids_path, "w", encoding="utf-8") as f:
