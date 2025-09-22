@@ -4,9 +4,9 @@ from typing import Iterable, List
 import numpy as np
 
 def set_num_threads(n: int = 1) -> None:
-    os.environ.setdefault("OMP_NUM_THREADS", str(n))
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", str(n))
-    os.environ.setdefault("MKL_NUM_THREADS", str(n))
+    os.environ["OMP_NUM_THREADS"] = str(n)
+    os.environ["OPENBLAS_NUM_THREADS"] = str(n)
+    os.environ["MKL_NUM_THREADS"] = str(n)
     try:
         import faiss  # type: ignore
         faiss.omp_set_num_threads(n)
@@ -16,7 +16,7 @@ def set_num_threads(n: int = 1) -> None:
 def set_determinism(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
-    os.environ.setdefault("PYTHONHASHSEED", str(seed))
+    os.environ["PYTHONHASHSEED"] = str(seed)
 
 def l2n(x: np.ndarray, axis: int | None = 1, eps: float = 1e-12) -> np.ndarray:
     if not isinstance(x, np.ndarray):
